@@ -1,0 +1,124 @@
+/* ==========================================================
+   CoolCat Analytics
+   Dark Theme
+   Activated via [data-theme="dark"] on <html> (see the inline
+   script in <head> and js/ui.js:wireThemeToggle).
+
+   Most of the app is already built on CSS variables (--surface,
+   --border, --text, etc.), so overriding those here re-themes
+   the majority of the UI for free. What's left below is the
+   handful of places in the original stylesheets that used a
+   literal white/near-white value instead of a variable.
+========================================================== */
+
+[data-theme="dark"]{
+
+    --signal-light:#3A2013;
+    --primary-light:var(--signal-light);
+    --success-light:#12301F;
+    --danger-light:#3A1720;
+    --warning-light:#382A0D;
+
+    --bg:#15161C;
+    --surface:#1C1E27;
+
+    --border:#2B2E38;
+
+    --text:#EDEEF2;
+    --text-light:#9498A6;
+
+    --shadow-sm:0 1px 3px rgba(0,0,0,.35);
+    --shadow-md:0 8px 24px rgba(0,0,0,.4);
+
+}
+
+/* Components that used a literal white/near-white background
+   instead of var(--surface) in the base stylesheets. */
+[data-theme="dark"] .chartCard,
+[data-theme="dark"] .tableCard{
+
+    background:var(--surface);
+
+}
+
+[data-theme="dark"] .secondaryButton,
+[data-theme="dark"] select,
+[data-theme="dark"] .customRangeInputs input[type="date"]{
+
+    background:var(--surface);
+    color:var(--text);
+    border-color:var(--border);
+
+}
+
+[data-theme="dark"] .modernTable thead{
+
+    background:#181A22;
+
+}
+
+[data-theme="dark"] .modernTable tbody tr:nth-child(even){
+
+    background:#191B23;
+
+}
+
+[data-theme="dark"] .modernTable tbody tr:hover{
+
+    background:#33241A;
+
+}
+
+[data-theme="dark"] .spreadsheetTable td:nth-child(2),
+[data-theme="dark"] .spreadsheetTable td:nth-child(4),
+[data-theme="dark"] .spreadsheetTable td:nth-child(6),
+[data-theme="dark"] .spreadsheetTable td:nth-child(8){
+
+    background:#1A1C25;
+
+}
+
+[data-theme="dark"] .rangeCompareBar{
+
+    background:var(--signal-light);
+    color:#FF9D75;
+
+}
+
+/* #trafficGroupSelect in charts.css uses an ID selector for its
+   base (white) styling, which outranks the generic "select" rule
+   above on specificity alone — this re-asserts dark colors for it. */
+[data-theme="dark"] #trafficGroupSelect{
+
+    background:var(--surface);
+    color:var(--text);
+    border-color:var(--border);
+
+}
+
+[data-theme="dark"] .noteCategoryBadge.cat-product{
+
+    background:#2E1F4D;
+    color:#C4B5FD;
+
+}
+
+[data-theme="dark"] .status.up,
+[data-theme="dark"] .deltaBadge.positive{
+
+    color:#4ADE94;
+
+}
+
+[data-theme="dark"] .status.down,
+[data-theme="dark"] .deltaBadge.negative{
+
+    color:#FF7A93;
+
+}
+
+[data-theme="dark"] .dataSourceWarning{
+
+    color:#F2B84B;
+
+}

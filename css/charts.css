@@ -1,0 +1,627 @@
+/* ==========================================================
+   Charts
+========================================================== */
+
+.chartCard{
+
+    background:var(--surface);
+
+    border:1px solid var(--border);
+
+    border-radius:var(--radius);
+
+    box-shadow:none;
+
+    padding:20px 22px;
+
+    margin-bottom:20px;
+
+    transition:.2s;
+
+}
+
+.chartCard:hover{
+
+    border-color:#D3D6DD;
+
+}
+
+/* ==========================================================
+   Header
+========================================================== */
+
+.chartHeader{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+    margin-bottom:18px;
+
+}
+
+.chartTitle{
+
+    display:flex;
+
+    flex-direction:column;
+
+}
+
+.chartTitle h3{
+
+    font-size:16px;
+
+    margin-bottom:4px;
+
+}
+
+.chartTitle span{
+
+    color:var(--text-light);
+
+    font-size:12.5px;
+
+}
+
+/* ==========================================================
+   Right Area
+========================================================== */
+
+.chartTools{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:12px;
+
+}
+
+
+
+/* ==========================================================
+   Chart Area
+========================================================== */
+
+.chartBody{
+
+    position:relative;
+
+    height:420px;
+
+}
+
+/* ==========================================================
+   Mini Charts
+========================================================== */
+
+.smallChart{
+
+    height:280px;
+
+}
+
+.miniTrendChart{
+
+    height:180px;
+
+    margin:12px 0 4px;
+
+}
+
+/* ==========================================================
+   Legend
+========================================================== */
+
+.metricToggles{
+
+    display:flex;
+
+    flex-wrap:wrap;
+
+    gap:16px;
+
+}
+
+.metricToggle{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:8px;
+
+    font-size:13px;
+
+    color:var(--text-light);
+
+    font-weight:600;
+
+    cursor:pointer;
+
+    user-select:none;
+
+    transition:.2s;
+
+}
+
+.metricToggle:hover{
+
+    color:var(--text);
+
+}
+
+.metricToggle input{
+
+    width:15px;
+
+    height:15px;
+
+    accent-color:var(--primary);
+
+    cursor:pointer;
+
+}
+
+.metricDot{
+
+    width:10px;
+
+    height:10px;
+
+    border-radius:50%;
+
+    flex-shrink:0;
+
+}
+
+.metricToggle input:not(:checked) ~ .metricDot{
+
+    opacity:.3;
+
+}
+
+.legendColor{
+
+    width:12px;
+
+    height:12px;
+
+    border-radius:50%;
+
+    margin-top:5px;
+
+    flex-shrink:0;
+
+}
+
+/* ==========================================================
+   Traffic Sources — Current vs Previous Doughnuts
+========================================================== */
+
+.trafficDoughnutRow{
+
+    display:grid;
+
+    grid-template-columns:1fr 1fr;
+
+    gap:32px;
+
+    margin-bottom:28px;
+
+}
+
+.trafficDoughnutCol{
+
+    display:flex;
+
+    flex-direction:column;
+
+}
+
+.trafficPeriodLabel{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:8px;
+
+    font-size:13px;
+
+    color:var(--text-light);
+
+    font-weight:600;
+
+    margin-bottom:14px;
+
+}
+
+.trafficPeriodLabel strong{
+
+    color:var(--text);
+
+    font-variant-numeric:tabular-nums;
+
+}
+
+.trafficChannelTrendWrap{
+
+    margin-bottom:28px;
+
+}
+
+.trafficChannelTrendHeader{
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:space-between;
+
+    gap:16px;
+
+    margin-bottom:16px;
+
+    flex-wrap:wrap;
+
+}
+
+.trafficChannelTrendHeader > div:first-child{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:8px;
+
+    font-size:14px;
+
+}
+
+.trafficChannelTrendHeader strong{
+
+    color:var(--text);
+
+    font-size:15px;
+
+}
+
+.trafficPeriodDot{
+
+    width:10px;
+
+    height:10px;
+
+    border-radius:50%;
+
+    flex-shrink:0;
+
+}
+
+.trafficPeriodDot.current{
+
+    background:var(--primary);
+
+}
+
+.trafficPeriodDot.previous{
+
+    background:#CBD5E1;
+
+}
+
+#trafficGroupSelect{
+
+    border:1px solid var(--border);
+
+    border-radius:8px;
+
+    padding:10px 14px;
+
+    font-size:13px;
+
+    font-weight:600;
+
+    background:var(--surface);
+
+    color:var(--text);
+
+    cursor:pointer;
+
+}
+
+/* ==========================================================
+   Traffic Comparison Table
+========================================================== */
+
+.trafficCompareWrap{
+
+    margin-top:8px;
+
+}
+
+.trafficCompareTable td.tcSource{
+
+    font-weight:600;
+
+}
+
+.tcSourceInner{
+
+    display:inline-flex;
+
+    align-items:center;
+
+    gap:8px;
+
+}
+
+.deltaBadge{
+
+    display:inline-flex;
+
+    align-items:center;
+
+    padding:4px 10px;
+
+    border-radius:6px;
+
+    font-size:12.5px;
+
+    font-weight:700;
+
+    font-family:var(--font-mono);
+
+}
+
+.deltaBadge.positive{
+
+    background:var(--success-light);
+
+    color:#0B7A4C;
+
+}
+
+.deltaBadge.negative{
+
+    background:var(--danger-light);
+
+    color:#A11530;
+
+}
+
+.emptyRow{
+
+    text-align:center !important;
+
+    color:var(--text-light);
+
+    padding:32px !important;
+
+}
+
+/* ==========================================================
+   Traffic Comparison Row — Drill-down
+   Rows are clickable to filter the Session Source table below
+   down to just that bucket (e.g. "Referral (Other)" -> which
+   actual sites make it up).
+========================================================== */
+
+.tcRow{
+
+    cursor:pointer;
+
+    transition:.2s;
+
+}
+
+.tcRow.active{
+
+    background:var(--primary-light) !important;
+
+}
+
+.tcRow.active td.tcSource{
+
+    color:var(--primary);
+
+}
+
+/* ==========================================================
+   Session Source Filter Status
+========================================================== */
+
+.sourceFilterStatus{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:8px;
+
+    font-size:14px;
+
+    color:var(--text-light);
+
+    background:var(--primary-light);
+
+    padding:8px 14px;
+
+    border-radius:8px;
+
+}
+
+.sourceFilterStatus strong{
+
+    color:var(--primary);
+
+}
+
+.clearFilterBtn{
+
+    background:none;
+
+    border:none;
+
+    color:var(--primary);
+
+    font-size:13px;
+
+    font-weight:600;
+
+    cursor:pointer;
+
+    padding:0;
+
+    text-decoration:underline;
+
+}
+
+/* ==========================================================
+   Trend Overlay Toggle (moving average)
+========================================================== */
+
+.trendOverlayRow{
+
+    margin:-16px 0 20px;
+
+}
+
+.trendOverlayToggle{
+
+    display:inline-flex;
+
+    align-items:center;
+
+    gap:8px;
+
+    font-size:13px;
+
+    color:var(--text-light);
+
+    font-weight:600;
+
+    cursor:pointer;
+
+    user-select:none;
+
+}
+
+.trendOverlayToggle:hover{
+
+    color:var(--text);
+
+}
+
+.trendOverlayToggle input{
+
+    width:15px;
+
+    height:15px;
+
+    accent-color:var(--primary);
+
+    cursor:pointer;
+
+}
+
+.viewHidden{
+
+    display:none !important;
+
+}
+
+/* Runs every time a view goes from hidden back to visible — CSS
+   animations replay automatically on a display:none -> block
+   transition, so no JS is needed to retrigger this. */
+.dashboardView:not(.viewHidden){
+
+    animation:viewEnter .32s cubic-bezier(.16,1,.3,1) both;
+
+}
+
+.emptyState{
+
+    display:flex;
+
+    flex-direction:column;
+
+    align-items:center;
+
+    justify-content:center;
+
+    text-align:center;
+
+    gap:10px;
+
+    padding:80px 20px;
+
+    color:var(--text-light);
+
+}
+
+.emptyState i{
+
+    width:36px;
+
+    height:36px;
+
+    color:var(--primary);
+
+    opacity:.6;
+
+}
+
+.emptyState h3{
+
+    color:var(--text);
+
+    font-size:17px;
+
+}
+
+.emptyState p{
+
+    max-width:360px;
+
+    font-size:14px;
+
+}
+
+/* ==========================================================
+   Responsive
+========================================================== */
+
+@media(max-width:900px){
+
+    .chartHeader{
+
+        flex-direction:column;
+
+        align-items:flex-start;
+
+        gap:16px;
+
+    }
+
+    .chartTools{
+
+        width:100%;
+
+        justify-content:space-between;
+
+    }
+
+    .trafficDoughnutRow{
+
+        grid-template-columns:1fr;
+
+        gap:24px;
+
+    }
+
+}

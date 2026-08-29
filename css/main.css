@@ -1,0 +1,616 @@
+/* ==========================================================
+   CoolCat Analytics
+   Main Theme
+   Version 1.0
+
+   Design system: "instrument panel" — a dark console rail
+   against a dense, light data surface. One signal color
+   (--signal, a hot vermilion) carries every interactive/brand
+   moment; metric colors are reserved for their own KPI and
+   never reused for chrome. Figures are set in a monospace
+   utility face (--font-mono) with tabular numerals throughout
+   so columns of numbers actually line up — see .kpiCard h3,
+   .number, and the mono utility class below.
+========================================================== */
+
+
+/* ==========================================================
+   Root Variables
+========================================================== */
+
+:root{
+
+    /* Type */
+
+    --font-display:'Space Grotesk','Hiragino Sans','Hiragino Kaku Gothic ProN',sans-serif;
+    --font-body:'Inter','Hiragino Sans','Hiragino Kaku Gothic ProN',sans-serif;
+    --font-mono:'IBM Plex Mono','Space Mono',ui-monospace,monospace;
+
+    /* Brand signal — the one accent used for interactive/active
+       chrome (buttons, links, active nav, focus). Never reused
+       for a metric. */
+
+    --signal:#FF5A2E;
+    --signal-light:#FFE3D6;
+
+    /* Back-compat alias: existing components still reference
+       --primary/--primary-light for interactive chrome. */
+
+    --primary:var(--signal);
+    --primary-light:var(--signal-light);
+
+    /* Metric colors — one per KPI, used consistently across
+       cards, chart lines, and legends. */
+
+    --m-users:#2B59FF;
+    --m-sessions:#0EA5A5;
+    --m-purchases:#0F9D63;
+    --m-revenue:#D6336C;
+    --m-cvr:#7C4DFF;
+
+    --success:#0F9D63;
+    --success-light:#DFF6E8;
+
+    --danger:#C81E3A;
+    --danger-light:#FBE1E6;
+
+    --warning:#C67C00;
+    --warning-light:#FCEACB;
+
+    --ink:#12141C;
+    --bg:#EEF0F1;
+    --surface:#FFFFFF;
+
+    --border:#E1E3E8;
+
+    --text:#14151A;
+    --text-light:#6B6F7B;
+
+    --shadow-sm:0 1px 2px rgba(18,20,28,.04);
+
+    --shadow-md:0 6px 20px rgba(18,20,28,.10);
+
+    --radius:10px;
+
+}
+
+
+/* ==========================================================
+   Reset
+========================================================== */
+
+*{
+
+    margin:0;
+    padding:0;
+
+    box-sizing:border-box;
+
+}
+
+html{
+
+    scroll-behavior:smooth;
+
+}
+
+body{
+
+    background:var(--bg);
+
+    color:var(--text);
+
+    font-family:var(--font-body);
+
+    font-size:14.5px;
+
+    line-height:1.55;
+
+}
+
+
+/* ==========================================================
+   Typography
+========================================================== */
+
+h1,h2,h3,h4{
+
+    font-family:var(--font-display);
+
+}
+
+h1{
+
+    font-size:28px;
+    font-weight:700;
+    letter-spacing:-.01em;
+
+}
+
+h2{
+
+    font-size:24px;
+    font-weight:700;
+    letter-spacing:-.01em;
+
+}
+
+h3{
+
+    font-size:18px;
+    font-weight:600;
+
+}
+
+h4{
+
+    font-size:15px;
+    font-weight:600;
+
+}
+
+p{
+
+    color:var(--text-light);
+
+}
+
+small{
+
+    color:var(--text-light);
+
+    font-size:12.5px;
+
+}
+
+
+/* ==========================================================
+   Data / Mono Utility
+   Applied to every figure the user scans down a column for —
+   KPI headline numbers and numeric table cells (see .kpiCard
+   h3 in cards.css and .number in tables.css) — so digits stay
+   tabular and align regardless of value width.
+========================================================== */
+
+.mono,
+.kpiCard h3,
+.number,
+.cardBottom strong,
+td.number,
+th.number{
+
+    font-family:var(--font-mono);
+    font-variant-numeric:tabular-nums;
+
+}
+
+
+/* ==========================================================
+   Links
+========================================================== */
+
+a{
+
+    color:inherit;
+
+    text-decoration:none;
+
+}
+
+
+/* ==========================================================
+   Buttons
+========================================================== */
+
+button{
+
+    border:none;
+
+    cursor:pointer;
+
+    transition:.25s;
+
+    font-family:inherit;
+
+}
+
+button:hover{
+
+    transform:translateY(-2px);
+
+}
+
+button:active{
+
+    transform:translateY(0);
+
+}
+
+button:disabled{
+
+    opacity:.7;
+
+    cursor:default;
+
+    transform:none;
+
+}
+
+@keyframes spin{
+
+    from{ transform:rotate(0deg); }
+
+    to{ transform:rotate(360deg); }
+
+}
+
+
+/* ==========================================================
+   Primary Button
+========================================================== */
+
+.primaryButton{
+
+    background:var(--primary);
+
+    color:white;
+
+    padding:11px 18px;
+
+    border-radius:8px;
+
+    display:flex;
+
+    align-items:center;
+
+    gap:10px;
+
+    font-weight:600;
+
+    font-family:var(--font-display);
+
+    box-shadow:var(--shadow-sm);
+
+}
+
+.primaryButton:hover{
+
+    box-shadow:var(--shadow-md);
+
+}
+
+
+/* ==========================================================
+   Secondary Button
+========================================================== */
+
+.secondaryButton{
+
+    background:var(--surface);
+
+    border:1px solid var(--border);
+
+    color:var(--text);
+
+    padding:11px 16px;
+
+    border-radius:8px;
+
+    font-family:var(--font-display);
+    font-weight:500;
+    font-size:13.5px;
+
+}
+
+.secondaryButton:hover{
+
+    border-color:var(--text-light);
+
+}
+
+
+/* ==========================================================
+   Form Controls
+========================================================== */
+
+select{
+
+    background:var(--surface);
+
+    border:1px solid var(--border);
+
+    border-radius:8px;
+
+    padding:11px 14px;
+
+    font-size:13.5px;
+
+    font-family:inherit;
+
+    color:var(--text);
+
+    transition:.25s;
+
+}
+
+select:hover{
+
+    border-color:var(--primary);
+
+}
+
+select:focus{
+
+    outline:none;
+
+    border-color:var(--primary);
+
+}
+
+.customRangeInputs{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:10px;
+
+}
+
+.customRangeInputs input[type="date"]{
+
+    background:var(--surface);
+
+    border:1px solid var(--border);
+
+    border-radius:8px;
+
+    padding:10px 14px;
+
+    font-size:13.5px;
+
+    font-family:inherit;
+
+    color:var(--text);
+
+    transition:.25s;
+
+}
+
+.customRangeInputs input[type="date"]:hover,
+.customRangeInputs input[type="date"]:focus{
+
+    outline:none;
+
+    border-color:var(--primary);
+
+}
+
+
+/* ==========================================================
+   Cards
+========================================================== */
+
+.card{
+
+    background:var(--surface);
+
+    border:1px solid var(--border);
+
+    border-radius:var(--radius);
+
+    box-shadow:none;
+
+}
+
+.card:hover{
+
+    border-color:#D3D6DD;
+
+}
+
+
+/* ==========================================================
+   Utilities
+========================================================== */
+
+.positive{
+
+    color:var(--success);
+
+}
+
+.negative{
+
+    color:var(--danger);
+
+}
+
+.textLight{
+
+    color:var(--text-light);
+
+}
+
+.sourceLink{
+
+    color:var(--primary);
+
+    text-decoration:underline;
+
+}
+
+.sourceLink:hover{
+
+    opacity:.75;
+
+}
+
+.center{
+
+    text-align:center;
+
+}
+
+.right{
+
+    text-align:right;
+
+}
+
+
+/* ==========================================================
+   Scrollbar
+========================================================== */
+
+::-webkit-scrollbar{
+
+    width:10px;
+
+}
+
+::-webkit-scrollbar-track{
+
+    background:transparent;
+
+}
+
+::-webkit-scrollbar-thumb{
+
+    background:#CBD5E1;
+
+    border-radius:100px;
+
+}
+
+::-webkit-scrollbar-thumb:hover{
+
+    background:#94A3B8;
+
+}
+
+
+/* ==========================================================
+   Motion
+   A small, deliberate set of moments: a tab switch settles in
+   rather than snapping, KPI cards stagger in on first paint,
+   and numbers count up instead of jumping straight to their
+   new value (see animateNumber() in ui.js). Everything here is
+   disabled under prefers-reduced-motion below.
+========================================================== */
+
+@keyframes viewEnter{
+
+    from{ opacity:0; transform:translateY(6px); }
+
+    to{ opacity:1; transform:translateY(0); }
+
+}
+
+@keyframes cardEnter{
+
+    from{ opacity:0; transform:translateY(8px); }
+
+    to{ opacity:1; transform:translateY(0); }
+
+}
+
+@keyframes shimmer{
+
+    from{ background-position:-200px 0; }
+
+    to{ background-position:calc(200px + 100%) 0; }
+
+}
+
+@keyframes flashHighlight{
+
+    0%{ background:var(--signal-light); }
+
+    100%{ background:transparent; }
+
+}
+
+
+/* ==========================================================
+   Skeleton Loading
+   Applied via THD.ui's skeleton helpers (ui.js) to KPI values
+   and table/list bodies while the first data fetch is in
+   flight, then cleared the moment real content is rendered.
+========================================================== */
+
+.skeletonBlock{
+
+    display:inline-block;
+
+    height:.9em;
+
+    border-radius:4px;
+
+    background:linear-gradient(90deg,var(--border) 25%,#EDEEF1 37%,var(--border) 63%);
+
+    background-size:400px 100%;
+
+    animation:shimmer 1.3s ease-in-out infinite;
+
+    vertical-align:middle;
+
+}
+
+[data-theme="dark"] .skeletonBlock{
+
+    background:linear-gradient(90deg,var(--border) 25%,#353946 37%,var(--border) 63%);
+
+    background-size:400px 100%;
+
+}
+
+.skeletonRow td{
+
+    padding-top:15px;
+    padding-bottom:15px;
+
+}
+
+
+/* ==========================================================
+   Responsive
+========================================================== */
+
+@media(max-width:768px){
+
+    body{
+
+        font-size:14px;
+
+    }
+
+}
+
+
+/* ==========================================================
+   Reduced Motion
+========================================================== */
+
+@media(prefers-reduced-motion:reduce){
+
+    *,
+    *::before,
+    *::after{
+
+        animation-duration:.001ms !important;
+        animation-iteration-count:1 !important;
+        transition-duration:.001ms !important;
+        scroll-behavior:auto !important;
+
+    }
+
+}
+
+
+/* Goals Form (Settings page) CSS removed — the form markup itself
+   was pulled from index.html when the Monthly Targets feature was
+   paused before shipping (js/goals.js and the KPI card progress
+   bars are still in place, just disconnected — see js/app.js's
+   init() and thd-dashboard-changelog.md item 11 for how to bring
+   the whole thing back, form included). */

@@ -1,0 +1,1431 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>CoolCat Analytics Dashboard</title>
+
+    <!-- Applied before any CSS paints, so a saved dark-mode
+         preference doesn't flash light-then-dark on load. -->
+    <script>
+        (function () {
+            try {
+                if (localStorage.getItem("thd-theme") === "dark") {
+                    document.documentElement.setAttribute("data-theme", "dark");
+                }
+            } catch (e) {}
+        })();
+    </script>
+
+    <!-- Google Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- PapaParse (CSV parsing for live Google Sheets data) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="css/main.css?v=23">
+    <link rel="stylesheet" href="css/layout.css?v=23">
+    <link rel="stylesheet" href="css/cards.css?v=23">
+    <link rel="stylesheet" href="css/charts.css?v=23">
+    <link rel="stylesheet" href="css/tables.css?v=23">
+    <link rel="stylesheet" href="css/dark.css?v=23">
+    <link rel="stylesheet" href="css/print.css?v=23" media="print">
+
+</head>
+
+<body>
+
+<div class="app">
+
+<!-- ======================================================
+SIDEBAR
+======================================================= -->
+
+<aside class="sidebar">
+
+    <div>
+
+        <div class="logo">
+
+            <h1>CoolCat</h1>
+
+            <span data-i18n="logo.subtitle">Analytics</span>
+
+        </div>
+
+        <nav class="sidebarMenu">
+
+            <a href="#" class="active" data-view="overview">
+
+                <i data-lucide="layout-dashboard"></i>
+
+                <span data-i18n="nav.overview">Overview</span>
+
+            </a>
+
+            <a href="#" data-view="traffic">
+
+                <i data-lucide="activity"></i>
+
+                <span data-i18n="nav.traffic">Traffic</span>
+
+            </a>
+
+            <a href="#" data-view="sales">
+
+                <i data-lucide="shopping-cart"></i>
+
+                <span data-i18n="nav.sales">Sales</span>
+
+            </a>
+
+            <a href="#" data-view="notes">
+
+                <i data-lucide="sticky-note"></i>
+
+                <span data-i18n="nav.notes">Notes</span>
+
+            </a>
+
+            <a href="#" data-view="settings">
+
+                <i data-lucide="settings"></i>
+
+                <span data-i18n="nav.settings">Settings</span>
+
+            </a>
+
+        </nav>
+
+    </div>
+
+    <div class="sidebarBottom">
+
+        <div class="version" data-i18n="sidebar.version">
+
+            Version 0.1
+
+        </div>
+
+    </div>
+
+</aside>
+
+
+
+<!-- ======================================================
+MAIN
+======================================================= -->
+
+<main class="mainContent">
+
+<!-- ================= HEADER ================= -->
+
+<header class="pageHeader">
+
+    <div>
+
+        <h2 id="pageTitle">
+
+            Dashboard Overview
+
+        </h2>
+
+        <p id="pageSubtitle">
+
+            Marketing performance at a glance
+
+        </p>
+
+    </div>
+
+    <div class="headerRight">
+
+        <div class="updateCard">
+
+            <small data-i18n="header.lastUpdate">
+
+                Last Update
+
+            </small>
+
+            <strong id="lastUpdate">
+
+                --
+
+            </strong>
+
+        </div>
+
+        <button class="secondaryButton" id="exportPdfBtn">
+
+            <i data-lucide="file-down"></i>
+
+            <span data-i18n="header.exportPdf">Export PDF</span>
+
+        </button>
+
+        <button class="primaryButton">
+
+            <i data-lucide="refresh-cw"></i>
+
+            <span data-i18n="header.refresh">Refresh</span>
+
+        </button>
+
+    </div>
+
+</header>
+
+
+
+<!-- ================= FILTER ================= -->
+
+<section class="filterSection">
+
+    <select id="dateRangeSelect">
+
+        <option value="today" data-i18n="filter.today">Today</option>
+
+        <option value="yesterday" data-i18n="filter.yesterday">Yesterday</option>
+
+        <option value="7d" data-i18n="filter.7d">Last 7 Days</option>
+
+        <option value="14d" data-i18n="filter.14d">Last 14 Days</option>
+
+        <option value="30d" data-i18n="filter.30d">Last 30 Days</option>
+
+        <option value="month" selected data-i18n="filter.month">This Month</option>
+
+        <option value="lastMonth" data-i18n="filter.lastMonth">Last Month</option>
+
+        <option value="3m" data-i18n="filter.3m">3 Months</option>
+
+        <option value="6m" data-i18n="filter.6m">6 Months</option>
+
+        <option value="year" data-i18n="filter.year">This Year</option>
+
+        <option value="lastYear" data-i18n="filter.lastYear">Last Year</option>
+
+        <option value="custom" data-i18n="filter.custom">Custom Range</option>
+
+    </select>
+
+    <div class="customRangeInputs" id="customRangeInputs" style="display:none;">
+
+        <input type="date" id="customStartDate">
+
+        <input type="date" id="customEndDate">
+
+        <button class="secondaryButton" id="applyCustomRange" data-i18n="filter.apply">Apply</button>
+
+    </div>
+
+    <select id="sourceFilterSelect">
+
+        <option value="all" data-i18n="filter.allSources">All Sources</option>
+
+    </select>
+
+    <select>
+
+        <option data-i18n="filter.comparePrevious">Compare Previous</option>
+
+    </select>
+
+</section>
+
+<div class="rangeCompareBar" id="rangeCompareBar"></div>
+
+<div class="dataSourceWarning" id="dataSourceWarning" style="display:none;">
+
+    <i data-lucide="alert-triangle"></i>
+
+    <span id="dataSourceWarningText"></span>
+
+</div>
+
+
+
+<div class="dashboardView" data-view="overview">
+
+<!-- ================= KPI ================= -->
+
+<section class="kpiGrid">
+
+    <article class="card kpiCard users" data-kpi="users">
+
+        <div class="cardTop">
+
+            <span data-i18n="kpi.totalUsers">Total Users</span>
+
+            <i data-lucide="users"></i>
+
+        </div>
+
+        <h3 data-field="value">--</h3>
+
+        <div class="cardBottom">
+
+            <div>
+
+                <strong data-field="delta">--</strong>
+
+                <small data-i18n="kpi.vsPrevious">vs Previous Period</small>
+
+            </div>
+
+            <div>
+
+                <small data-i18n="kpi.avgDay">Avg / Day</small>
+
+                <strong data-field="daily">--</strong>
+
+            </div>
+
+        </div>
+
+        <div class="kpiGoalProgress" data-goal="users" style="display:none;">
+
+            <div class="kpiGoalBar">
+
+                <div class="kpiGoalBarFill" data-field="goalFill"></div>
+
+            </div>
+
+            <small data-field="goalLabel"></small>
+
+        </div>
+
+    </article>
+
+
+
+    <article class="card kpiCard sessions" data-kpi="sessions">
+
+        <div class="cardTop">
+
+            <span data-i18n="kpi.sessions">Sessions</span>
+
+            <i data-lucide="activity"></i>
+
+        </div>
+
+        <h3 data-field="value">--</h3>
+
+        <div class="cardBottom">
+
+            <div>
+
+                <strong data-field="delta">--</strong>
+
+                <small data-i18n="kpi.vsPrevious">vs Previous Period</small>
+
+            </div>
+
+            <div>
+
+                <small data-i18n="kpi.avgDay">Avg / Day</small>
+
+                <strong data-field="daily">--</strong>
+
+            </div>
+
+        </div>
+
+        <div class="kpiGoalProgress" data-goal="sessions" style="display:none;">
+
+            <div class="kpiGoalBar">
+
+                <div class="kpiGoalBarFill" data-field="goalFill"></div>
+
+            </div>
+
+            <small data-field="goalLabel"></small>
+
+        </div>
+
+    </article>
+
+
+
+    <article class="card kpiCard purchases" data-kpi="purchases">
+
+        <div class="cardTop">
+
+            <span data-i18n="kpi.purchases">Ecommerce Purchases</span>
+
+            <i data-lucide="shopping-cart"></i>
+
+        </div>
+
+        <h3 data-field="value">--</h3>
+
+        <div class="cardBottom">
+
+            <div>
+
+                <strong data-field="delta">--</strong>
+
+                <small data-i18n="kpi.vsPrevious">vs Previous Period</small>
+
+            </div>
+
+            <div>
+
+                <small data-i18n="kpi.dailyAvg">Daily Avg</small>
+
+                <strong data-field="daily">--</strong>
+
+            </div>
+
+        </div>
+
+        <div class="kpiGoalProgress" data-goal="purchases" style="display:none;">
+
+            <div class="kpiGoalBar">
+
+                <div class="kpiGoalBarFill" data-field="goalFill"></div>
+
+            </div>
+
+            <small data-field="goalLabel"></small>
+
+        </div>
+
+    </article>
+
+
+
+    <article class="card kpiCard revenue" data-kpi="revenue">
+
+        <div class="cardTop">
+
+            <span data-i18n="kpi.revenue">Total Revenue</span>
+
+            <i data-lucide="wallet"></i>
+
+        </div>
+
+        <h3 data-field="value">--</h3>
+
+        <div class="cardBottom">
+
+            <div>
+
+                <strong data-field="delta">--</strong>
+
+                <small data-i18n="kpi.vsPrevious">vs Previous Period</small>
+
+            </div>
+
+            <div>
+
+                <small data-i18n="kpi.dailyAvg">Daily Avg</small>
+
+                <strong data-field="daily">--</strong>
+
+            </div>
+
+        </div>
+
+        <div class="kpiGoalProgress" data-goal="revenue" style="display:none;">
+
+            <div class="kpiGoalBar">
+
+                <div class="kpiGoalBarFill" data-field="goalFill"></div>
+
+            </div>
+
+            <small data-field="goalLabel"></small>
+
+        </div>
+
+    </article>
+
+
+
+    <article class="card kpiCard cvr" data-kpi="cvr">
+
+        <div class="cardTop">
+
+            <span data-i18n="kpi.cvr">CVR</span>
+
+            <i data-lucide="target"></i>
+
+        </div>
+
+        <h3 data-field="value">--</h3>
+
+        <div class="cardBottom">
+
+            <div>
+
+                <strong data-field="delta">--</strong>
+
+                <small data-i18n="kpi.vsPrevious">vs Previous Period</small>
+
+            </div>
+
+            <div>
+
+                <small data-i18n="kpi.goal">Goal</small>
+
+                <strong data-field="daily">--</strong>
+
+            </div>
+
+        </div>
+
+        <div class="kpiGoalProgress" data-goal="cvr" style="display:none;">
+
+            <div class="kpiGoalBar">
+
+                <div class="kpiGoalBarFill" data-field="goalFill"></div>
+
+            </div>
+
+            <small data-field="goalLabel"></small>
+
+        </div>
+
+    </article>
+
+</section>
+
+
+
+<!-- ================= MAIN CHART ================= -->
+
+<section class="chartCard">
+
+    <div class="chartHeader">
+
+        <div>
+
+            <h3 data-i18n="trend.title">
+
+                Metrics Trend
+
+            </h3>
+
+            <small data-i18n="trend.subtitle">
+
+                Select a Date Range Above
+
+            </small>
+
+        </div>
+
+        <div class="metricToggles" id="metricToggles">
+
+            <label class="metricToggle" data-metric="users">
+
+                <input type="checkbox" checked>
+
+                <span class="metricDot" style="background:#2B59FF"></span>
+
+                <span data-i18n="kpi.totalUsers">Total Users</span>
+
+            </label>
+
+            <label class="metricToggle" data-metric="sessions">
+
+                <input type="checkbox">
+
+                <span class="metricDot" style="background:#0EA5A5"></span>
+
+                <span data-i18n="kpi.sessions">Sessions</span>
+
+            </label>
+
+            <label class="metricToggle" data-metric="purchases">
+
+                <input type="checkbox" checked>
+
+                <span class="metricDot" style="background:#0F9D63"></span>
+
+                <span data-i18n="kpi.purchases">Ecommerce Purchases</span>
+
+            </label>
+
+            <label class="metricToggle" data-metric="revenue">
+
+                <input type="checkbox">
+
+                <span class="metricDot" style="background:#D6336C"></span>
+
+                <span data-i18n="kpi.revenue">Total Revenue</span>
+
+            </label>
+
+            <label class="metricToggle" data-metric="cvr">
+
+                <input type="checkbox">
+
+                <span class="metricDot" style="background:#7C4DFF"></span>
+
+                <span data-i18n="kpi.cvr">CVR</span>
+
+            </label>
+
+        </div>
+
+    </div>
+
+    <div class="trendOverlayRow">
+
+        <label class="trendOverlayToggle">
+
+            <input type="checkbox" id="movingAverageToggle">
+
+            <span data-i18n="trend.movingAvg">Show 7-day moving average</span>
+
+        </label>
+
+    </div>
+
+    <div class="chartBody">
+
+        <canvas id="trendChart"></canvas>
+
+    </div>
+
+</section>
+
+</div>
+
+
+
+<!-- ================= TRAFFIC SOURCES ================= -->
+
+<div class="dashboardView viewHidden" data-view="traffic">
+
+<section class="chartCard trafficSourcesCard">
+
+    <div class="chartHeader">
+
+        <div>
+
+            <h3 data-i18n="traffic.title">
+
+                Traffic Sources
+
+            </h3>
+
+            <small data-i18n="traffic.subtitle">
+
+                Selected period vs. the period before it, by ad platform
+
+            </small>
+
+        </div>
+
+        <div class="chartTools">
+
+            <select id="trafficGroupSelect">
+
+                <option value="platform" selected data-i18n="traffic.byPlatform">By Ad Platform (Google, Meta, Yahoo, Criteo…)</option>
+
+                <option value="channel" data-i18n="traffic.byChannel">By Channel (GA4 default grouping)</option>
+
+            </select>
+
+        </div>
+
+    </div>
+
+    <div class="trafficDoughnutRow" id="trafficDoughnutRow">
+
+        <div class="trafficDoughnutCol">
+
+            <div class="trafficPeriodLabel">
+
+                <span class="trafficPeriodDot current"></span>
+
+                <span data-i18n="traffic.selectedPeriod">Selected period:</span> <strong id="trafficPeriodCurrent">--</strong>
+
+            </div>
+
+            <div class="chartBody smallChart">
+
+                <canvas id="trafficChartCurrent"></canvas>
+
+            </div>
+
+        </div>
+
+        <div class="trafficDoughnutCol">
+
+            <div class="trafficPeriodLabel">
+
+                <span class="trafficPeriodDot previous"></span>
+
+                <span data-i18n="traffic.previousPeriod">Previous period:</span> <strong id="trafficPeriodPrevious">--</strong>
+
+            </div>
+
+            <div class="chartBody smallChart">
+
+                <canvas id="trafficChartPrevious"></canvas>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="trafficChannelTrendWrap" id="trafficChannelTrendWrap" style="display:none;">
+
+        <div class="trafficChannelTrendHeader">
+
+            <div>
+
+                <span class="trafficPeriodDot current"></span>
+
+                <strong id="trafficChannelTrendTitle">--</strong>
+
+            </div>
+
+            <div class="chartTools">
+
+                <select id="trafficChannelMetricSelect">
+
+                    <option value="sessions" selected data-i18n="kpi.sessions">Sessions</option>
+
+                    <option value="users" data-i18n="kpi.totalUsers">Total Users</option>
+
+                    <option value="purchases" data-i18n="kpi.purchases">Ecommerce Purchases</option>
+
+                    <option value="revenue" data-i18n="kpi.revenue">Total Revenue</option>
+
+                    <option value="cvr" data-i18n="kpi.cvr">CVR</option>
+
+                </select>
+
+                <button class="secondaryButton" id="trafficChannelTrendCloseBtn" data-i18n="traffic.backToOverview">Back to Overview</button>
+
+            </div>
+
+        </div>
+
+        <div class="chartBody">
+
+            <canvas id="trafficChannelTrendChart"></canvas>
+
+        </div>
+
+    </div>
+
+    <div class="tableToolsRow">
+
+        <button class="csvExportBtn" id="exportTrafficCsvBtn" data-i18n-title="export.csv" title="Export CSV">
+
+            <i data-lucide="download"></i>
+
+        </button>
+
+    </div>
+
+    <div class="tableResponsive trafficCompareWrap">
+
+        <table class="modernTable trafficCompareTable">
+
+            <thead>
+
+                <tr>
+
+                    <th data-i18n="th.source">Source</th>
+
+                    <th class="number" data-i18n="th.sessionsCurrent">Sessions (Current)</th>
+
+                    <th class="number" data-i18n="th.sessionsPrevious">Sessions (Previous)</th>
+
+                    <th class="number" data-i18n="th.deltaVsPrevious">Δ vs Previous</th>
+
+                    <th class="number" data-i18n="th.revenueCurrent">Revenue (Current)</th>
+
+                    <th class="number" data-i18n="th.cvrCurrent">CVR (Current)</th>
+
+                </tr>
+
+            </thead>
+
+            <tbody id="trafficCompareTable">
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</section>
+
+
+
+<!-- ================= SESSION SOURCE TABLE ================= -->
+
+<section class="tableCard">
+
+    <div class="tableHeader">
+
+        <h3 data-i18n="source.title">
+
+            Session Source / Medium
+
+        </h3>
+
+        <div class="tableTools">
+
+            <div class="sourceFilterStatus" id="sourceFilterStatus" style="display:none;">
+
+                <span data-i18n="source.filteredBy">Filtered by</span> <strong id="sourceFilterLabel"></strong>
+
+                <button class="clearFilterBtn" id="clearSourceFilterBtn" type="button" data-i18n="source.clear">Clear</button>
+
+            </div>
+
+            <button class="secondaryButton" id="toggleSourcesBtn" data-i18n="source.showAll">
+
+                Show All
+
+            </button>
+
+            <button class="csvExportBtn" id="exportSourceCsvBtn" data-i18n-title="export.csv" title="Export CSV">
+
+                <i data-lucide="download"></i>
+
+            </button>
+
+        </div>
+
+    </div>
+
+    <div class="tableResponsive">
+
+        <table class="modernTable">
+
+            <thead>
+
+                <tr>
+
+                    <th data-i18n="th.sourceMediumCol">Session Source / Medium</th>
+
+                    <th class="number" data-i18n="th.sessions">Sessions</th>
+
+                    <th class="number" data-i18n="th.totalUsers">Total Users</th>
+
+                    <th class="number" data-i18n="th.ecommercePurchases">Ecommerce Purchases</th>
+
+                    <th class="number" data-i18n="th.totalRevenue">Total Revenue</th>
+
+                    <th class="number" data-i18n="th.cvr">CVR</th>
+
+                </tr>
+
+            </thead>
+
+            <tbody id="sourceTable">
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</section>
+
+</div>
+
+
+
+<!-- ================= INSIGHTS ================= -->
+
+<div class="dashboardView" data-view="overview">
+
+<section class="insightCard">
+
+    <div class="sectionTitle">
+
+        <h3 data-i18n="insights.title">
+
+            Key Insights
+
+        </h3>
+
+    </div>
+
+    <ul>
+
+        <li>Loading insights…</li>
+
+    </ul>
+
+</section>
+
+</div>
+
+
+
+<!-- ================= TOP LANDING PAGES ================= -->
+
+<div class="dashboardView viewHidden" data-view="traffic">
+
+<section class="chartCard">
+
+    <div class="chartHeader">
+
+        <div>
+
+            <h3 data-i18n="landing.title">
+
+                Top Landing Pages
+
+            </h3>
+
+            <small id="landingPagesPeriod">
+
+            </small>
+
+        </div>
+
+        <div class="chartTools">
+
+            <select id="landingDeviceSelect">
+
+                <option value="all" selected data-i18n="landing.allDevices">All Devices</option>
+
+                <option value="PC" data-i18n="landing.pc">PC</option>
+
+                <option value="Smartphone" data-i18n="landing.smartphone">Smartphone</option>
+
+                <option value="Tablet" data-i18n="landing.tablet">Tablet</option>
+
+            </select>
+
+        </div>
+
+    </div>
+
+    <div class="trendOverlayRow">
+
+        <label class="trendOverlayToggle">
+
+            <input type="checkbox" id="landingHideSystemToggle" checked>
+
+            <span data-i18n="landing.hideSystem">Hide login/checkout/system pages</span>
+
+        </label>
+
+    </div>
+
+    <div class="landingRisingPanel" id="landingRisingPanel" style="display:none;">
+
+        <div class="landingRisingPanelHeader">
+
+            <div>
+
+                <span class="risingPanelIcon" id="landingRisingPanelIcon">📈</span>
+
+                <span id="landingRisingPanelLabel">Rising Page Detected</span> — <strong id="landingRisingPanelTitle">--</strong>
+
+            </div>
+
+            <button class="secondaryButton" id="landingRisingPanelCloseBtn" data-i18n="landing.risingPanelClose">Close</button>
+
+        </div>
+
+        <p id="landingRisingPanelSummary"></p>
+
+        <div class="chartBody miniTrendChart">
+
+            <canvas id="landingRisingPanelChart"></canvas>
+
+        </div>
+
+        <p class="landingRisingPanelSpike" id="landingRisingPanelSpike"></p>
+
+        <div class="sourceBreakdownSection">
+
+            <div class="sourceBreakdownHeader">
+
+                <h4 data-i18n="landing.sourceBreakdownTitle">Where the sessions came from</h4>
+
+                <span class="sourceBreakdownDate" id="sourceBreakdownDate"></span>
+
+            </div>
+
+            <p class="sourceBreakdownHint" id="sourceBreakdownHint" data-i18n="landing.sourceBreakdownHint">Click any bar above to see that day's source breakdown.</p>
+
+            <div class="sourceBreakdownList" id="sourceBreakdownList"></div>
+
+        </div>
+
+    </div>
+
+    <div class="landingInsightsCard" id="landingInsightsCard">
+
+        <h4 data-i18n="landingInsights.heading">Insights</h4>
+
+        <ul class="miniInsights" id="landingPageInsights">
+
+        </ul>
+
+    </div>
+
+    <div id="landingPages">
+
+    </div>
+
+    <button class="secondaryButton landingShowAllBtn" id="toggleLandingPagesBtn" data-i18n="source.showAll">
+
+        Show All
+
+    </button>
+
+</section>
+
+</div>
+
+
+
+<!-- ================= TABLE ================= -->
+
+<div class="dashboardView viewHidden" data-view="sales">
+
+<section class="tableCard">
+
+    <div class="tableHeader">
+
+        <h3 data-i18n="monthly.title">
+
+            Monthly Business Performance
+
+        </h3>
+
+        <div class="tableTools">
+
+            <button class="csvExportBtn" id="exportMonthlyCsvBtn" data-i18n-title="export.csv" title="Export CSV">
+
+                <i data-lucide="download"></i>
+
+            </button>
+
+        </div>
+
+    </div>
+
+    <div class="tableResponsive">
+
+        <table class="modernTable">
+
+            <thead>
+
+                <tr>
+
+                    <th data-i18n="th.month">Month</th>
+
+                    <th class="number" data-i18n="th.revenue">Revenue</th>
+
+                    <th class="number" data-i18n="th.orders">Orders</th>
+
+                    <th class="number" data-i18n="th.users">Users</th>
+
+                    <th class="number" data-i18n="th.cvr">CVR</th>
+
+                    <th data-i18n="th.trend">Trend</th>
+
+                </tr>
+
+            </thead>
+
+            <tbody id="monthlyTable">
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</section>
+
+
+
+<!-- ================= AOV TREND ================= -->
+
+<section class="chartCard">
+
+    <div class="chartHeader">
+
+        <div>
+
+            <h3 data-i18n="aov.title">
+
+                Average Order Value Trend
+
+            </h3>
+
+            <small data-i18n="aov.subtitle">
+
+                Overall vs. new vs. repeat customers, by business month
+
+            </small>
+
+        </div>
+
+        <div class="metricToggles" id="aovMetricToggles">
+
+            <label class="metricToggle" data-metric="overall">
+
+                <input type="checkbox" checked>
+
+                <span class="metricDot" style="background:#9498A6"></span>
+
+                <span data-i18n="aov.legendOverall">Overall</span>
+
+            </label>
+
+            <label class="metricToggle" data-metric="new">
+
+                <input type="checkbox" checked>
+
+                <span class="metricDot" style="background:#2B59FF"></span>
+
+                <span data-i18n="aov.legendNew">New Customers</span>
+
+            </label>
+
+            <label class="metricToggle" data-metric="repeat">
+
+                <input type="checkbox" checked>
+
+                <span class="metricDot" style="background:#7C4DFF"></span>
+
+                <span data-i18n="aov.legendRepeat">Repeat Customers</span>
+
+            </label>
+
+        </div>
+
+    </div>
+
+    <div class="chartBody">
+
+        <canvas id="aovChart"></canvas>
+
+    </div>
+
+</section>
+
+
+
+<!-- ================= NEW / REPEAT TABLE (SPREADSHEET) ================= -->
+
+<section class="tableCard">
+
+    <div class="tableHeader">
+
+        <div>
+
+            <h3 data-i18n="newRepeat.tableTitle">
+
+                WEB本店 新規／リピータ
+
+            </h3>
+
+            <small class="textLight" id="newRepeatSourceNote">
+
+            </small>
+
+        </div>
+
+        <div class="tableTools">
+
+            <button class="csvExportBtn" id="exportNewRepeatCsvBtn" data-i18n-title="export.csv" title="Export CSV">
+
+                <i data-lucide="download"></i>
+
+            </button>
+
+        </div>
+
+    </div>
+
+    <div class="tableResponsive">
+
+        <table class="modernTable spreadsheetTable">
+
+            <thead>
+
+                <tr>
+
+                    <th data-i18n="th.year">年度</th>
+
+                    <th class="number" data-i18n="th.overallRevenue">総合売上</th>
+
+                    <th class="number" data-i18n="th.totalOrders">総合受注件数</th>
+
+                    <th class="number" data-i18n="th.newRevenue">新規売上</th>
+
+                    <th class="number" data-i18n="th.newOrders">新規受注件数</th>
+
+                    <th class="number" data-i18n="th.repeatRevenue">リピーター売上</th>
+
+                    <th class="number" data-i18n="th.repeatOrders">リピーター受注件数</th>
+
+                    <th class="number" data-i18n="th.visitorsPc">訪問者数：PC</th>
+
+                    <th class="number" data-i18n="th.visitorsSp">訪問者数：SP</th>
+
+                    <th class="number" data-i18n="th.visitorsTotal">訪問者数：合計</th>
+
+                </tr>
+
+            </thead>
+
+            <tbody id="newRepeatTable">
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</section>
+
+
+
+<!-- ================= NEW / REPEAT CHART ================= -->
+
+<section class="chartCard">
+
+    <div class="chartHeader">
+
+        <div>
+
+            <h3 data-i18n="newRepeat.chartTitle">
+
+                New vs Repeat Customers
+
+            </h3>
+
+            <small data-i18n="newRepeat.chartSubtitle">
+
+                Share of orders and revenue from new vs. repeat customers, by business month
+
+            </small>
+
+        </div>
+
+    </div>
+
+    <div class="chartBody">
+
+        <canvas id="newRepeatChart"></canvas>
+
+    </div>
+
+</section>
+
+
+
+<!-- ================= NEW / REPEAT INSIGHTS ================= -->
+
+<section class="insightCard">
+
+    <div class="sectionTitle">
+
+        <h3 data-i18n="newRepeatInsights.title">
+
+            New vs Repeat Insights
+
+        </h3>
+
+    </div>
+
+    <ul id="newRepeatInsights">
+
+        <li>Loading insights…</li>
+
+    </ul>
+
+</section>
+
+</div>
+
+
+
+<!-- ================= NOTES ================= -->
+
+<div class="dashboardView viewHidden" data-view="notes">
+
+<section class="chartCard">
+
+    <div class="chartHeader">
+
+        <h3 data-i18n="notes.title">Team Notes</h3>
+
+    </div>
+
+    <p class="notesSubtitle" data-i18n="notes.subtitle">Jot down remarks from a discussion, a product observation, or anything worth remembering — visible to the whole team, synced across devices.</p>
+
+    <div class="noteMetaRow">
+
+        <input type="text" id="noteAuthorInput" class="noteAuthorInput" placeholder="Your name" data-i18n-placeholder="notes.yourName">
+
+        <select id="noteCategorySelect" class="noteCategorySelect">
+
+            <option value="general" data-i18n="notes.catGeneral">General</option>
+
+            <option value="traffic" data-i18n="notes.catTraffic">Traffic</option>
+
+            <option value="sales" data-i18n="notes.catSales">Sales</option>
+
+            <option value="product" data-i18n="notes.catProduct">Product</option>
+
+            <option value="bug" data-i18n="notes.catBug">Bug</option>
+
+            <option value="idea" data-i18n="notes.catIdea">Idea</option>
+
+        </select>
+
+    </div>
+
+    <textarea id="noteInput" class="noteInput" rows="3" placeholder="e.g. Discussed re-pricing the SP-14 bundle after the Q3 review — revisit next month." data-i18n-placeholder="notes.placeholder"></textarea>
+
+    <div class="noteActions">
+
+        <button class="primaryButton" id="addNoteBtn" data-i18n="notes.addNote">Add Note</button>
+
+    </div>
+
+</section>
+
+<section class="chartCard">
+
+    <div class="chartHeader">
+
+        <h3 data-i18n="notes.history" id="notesHistoryTitle">History</h3>
+
+        <button class="secondaryButton" id="notesArchiveToggleBtn" data-i18n="notes.showArchived">Show Archived</button>
+
+    </div>
+
+    <div id="notesList" class="notesList">
+
+    </div>
+
+</section>
+
+</div>
+
+
+
+<!-- ================= SETTINGS ================= -->
+
+<div class="dashboardView viewHidden" data-view="settings">
+
+<section class="chartCard">
+
+    <div class="chartHeader">
+
+        <h3 data-i18n="settings.appearance">Appearance</h3>
+
+    </div>
+
+    <div class="settingRow">
+
+        <div>
+
+            <div class="settingLabel" data-i18n="settings.darkTheme">Dark theme</div>
+
+            <div class="settingDesc" data-i18n="settings.darkThemeDesc">Switch the dashboard to a dark color scheme. Saved on this device.</div>
+
+        </div>
+
+        <label class="themeSwitch">
+
+            <input type="checkbox" id="darkThemeToggle">
+
+            <span class="themeSwitchTrack"></span>
+
+        </label>
+
+    </div>
+
+    <div class="settingRow">
+
+        <div>
+
+            <div class="settingLabel" data-i18n="settings.language">Language</div>
+
+            <div class="settingDesc" data-i18n="settings.languageDesc">Choose the display language for the dashboard. Saved on this device.</div>
+
+        </div>
+
+        <select id="languageSelect">
+
+            <option value="ja">日本語</option>
+
+            <option value="en">English</option>
+
+        </select>
+
+    </div>
+
+</section>
+
+<section class="chartCard">
+
+    <div class="emptyState">
+
+        <i data-lucide="settings"></i>
+
+        <h3 data-i18n="settings.comingSoon">More settings coming soon</h3>
+
+        <p data-i18n="settings.comingSoonDesc">Account, data source, and notification preferences will live here.</p>
+
+    </div>
+
+</section>
+
+</div>
+
+</main>
+
+</div>
+
+<script>
+
+    lucide.createIcons();
+
+</script>
+
+<script src="js/i18n.js?v=23"></script>
+<script src="js/charts.js?v=23"></script>
+<script src="js/ui.js?v=23"></script>
+<script src="js/data.js?v=23"></script>
+<script src="js/export.js?v=23"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="js/notes.js?v=23"></script>
+<!-- js/goals.js (Monthly Targets) — built for v2 but paused before ship,
+     see thd-dashboard-changelog.md. Re-add this tag plus the wiring
+     commented out in app.js's init() to bring it back. -->
+<script src="js/app.js?v=23"></script>
+
+</body>
+</html>
