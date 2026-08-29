@@ -152,7 +152,3 @@ Local CSS/JS references carry a `?v=N` cache-busting query string. Bump it on ev
 browsers will serve stale files indefinitely.
 
 </details>
-
-## License
-
-MIT
