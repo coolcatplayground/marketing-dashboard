@@ -71,6 +71,13 @@ window.I18N = (function () {
             "filter.apply": "Apply",
             "filter.allSources": "All Sources",
             "filter.comparePrevious": "Compare Previous",
+            "filter.compareYoy": "Compare Same Period Last Year",
+
+            "rangeCompare.lookingAt": "Looking at",
+            "rangeCompare.vsPrevious": "vs previous period",
+            "rangeCompare.vsYoy": "vs same period last year",
+            "rangeCompare.noCompareData": "No comparison data available for {start} – {end} (outside the available data range)",
+            "kpi.noCompareData": "N/A",
 
             "kpi.totalUsers": "Total Users",
             "kpi.sessions": "Sessions",
@@ -120,6 +127,8 @@ window.I18N = (function () {
             "landingInsight.cooling": "{title}'s sessions dropped {figure} in the second half of the last 30 days vs. the first half.",
             "landingInsight.deviceMismatch": "{title} skews heavily toward {device} ({figure} of its sessions).",
             "landingInsight.spike": "{title} had an unusually high {figure} sessions on {date}, compared to its typical {mean} per day.",
+            "landingInsight.spikeToday": "{title} is spiking today — {figure} sessions vs. a typical {mean}.",
+            "landingInsight.spikeYesterday": "{title} spiked yesterday — {figure} sessions vs. a typical {mean}.",
             "landingInsight.overviewRising": "📈 {title} is up {figure} this week vs. last week — click to see when it happened.",
             "landing.empty": "No landing page data for this window.",
             "landing.notSet": "(not set)",
@@ -128,6 +137,8 @@ window.I18N = (function () {
             "landing.pageDetailTitle": "Page Detail",
             "landing.risingPanelWeek": "{current} sessions this week vs. {previous} last week ({figure})",
             "landing.risingPanelWeekNew": "{current} sessions this week (no data last week to compare)",
+            "landing.spikePanelTitle": "Sudden Spike Detected",
+            "landing.spikePanelSummary": "{current} sessions on {date} — typical day: {baseline} ({figure})",
             "landing.risingPanelSpike": "Biggest single-day jump: {date} — {value} sessions (typical day: ~{mean})",
             "landing.risingPanelClose": "Close",
 
@@ -144,6 +155,7 @@ window.I18N = (function () {
 
             "insights.title": "Key Insights",
             "insights.empty": "Not enough data yet to generate insights for this period.",
+            "insights.topLandingTitle": "Top Landing Pages Insights",
 
             "source.title": "Session Source / Medium",
             "source.filteredBy": "Filtered by",
@@ -316,6 +328,13 @@ window.I18N = (function () {
             "filter.apply": "適用",
             "filter.allSources": "すべての流入元",
             "filter.comparePrevious": "前期間と比較",
+            "filter.compareYoy": "前年同期間と比較",
+
+            "rangeCompare.lookingAt": "対象期間：",
+            "rangeCompare.vsPrevious": "前期間と比較",
+            "rangeCompare.vsYoy": "前年同期間と比較",
+            "rangeCompare.noCompareData": "{start} – {end} の比較データが見つかりません（データ範囲外）",
+            "kpi.noCompareData": "対象外",
 
             "kpi.totalUsers": "総ユーザー数",
             "kpi.sessions": "セッション数",
@@ -365,6 +384,8 @@ window.I18N = (function () {
             "landingInsight.cooling": "{title}のセッションは直近30日間の後半で前半比{figure}減少しました。",
             "landingInsight.deviceMismatch": "{title}は{device}に大きく偏っています（セッションの{figure}）。",
             "landingInsight.spike": "{title}は{date}に{figure}セッションと、通常の1日あたり{mean}セッションに比べて突出して多くなりました。",
+            "landingInsight.spikeToday": "{title} が本日急上昇中 — {figure} セッション（通常 {mean}）。",
+            "landingInsight.spikeYesterday": "{title} が前日急上昇 — {figure} セッション（通常 {mean}）。",
             "landingInsight.overviewRising": "📈 {title}が今週{figure}増加しています。クリックするといつ急増したか確認できます。",
             "landing.empty": "この期間のランディングページデータはありません。",
             "landing.notSet": "（未設定）",
@@ -373,6 +394,8 @@ window.I18N = (function () {
             "landing.pageDetailTitle": "ページ詳細",
             "landing.risingPanelWeek": "今週 {current} セッション（先週 {previous} セッションから {figure}）",
             "landing.risingPanelWeekNew": "今週 {current} セッション（先週のデータなし）",
+            "landing.spikePanelTitle": "急上昇を検出",
+            "landing.spikePanelSummary": "{date} は {current} セッション — 通常 {baseline} セッション（{figure}）",
             "landing.risingPanelSpike": "最も急増した日：{date} — {value}セッション（通常は1日あたり約{mean}セッション）",
             "landing.risingPanelClose": "閉じる",
 
@@ -389,6 +412,7 @@ window.I18N = (function () {
 
             "insights.title": "主なインサイト",
             "insights.empty": "この期間はインサイトを生成するのに十分なデータがありません。",
+            "insights.topLandingTitle": "急上昇ランディングページ インサイト",
 
             "source.title": "セッションの参照元 / メディア",
             "source.filteredBy": "絞り込み中：",

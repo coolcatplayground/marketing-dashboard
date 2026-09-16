@@ -545,7 +545,13 @@ window.THD = window.THD || {};
     // preceding" — see note above.
     const YEAR_ALIGNED_RANGES = new Set(["year", "lastYear"]);
 
-    function resolveRange(rangeKey, customRange) {
+    // compareMode: "previous" (default) = same length, immediately
+    // preceding — except the two ranges above, which are already
+    // year-aligned by definition. "yoy" = same calendar dates, exactly
+    // one year back, regardless of which range is selected — e.g. a
+    // custom Jun 1–Sep 2 2026 range compares to Jun 1–Sep 2 2025, not
+    // to the 94 days immediately before it.
+    function resolveRange(rangeKey, customRange, compareMode = "previous") {
         let start, end;
         if (rangeKey === "custom" && customRange && customRange.start && customRange.end) {
             start = startOfDay(customRange.start);
@@ -558,7 +564,7 @@ window.THD = window.THD || {};
         const spanDays = Math.round((end - start) / 86400000) + 1;
 
         let prevStart, prevEnd;
-        if (YEAR_ALIGNED_RANGES.has(rangeKey)) {
+        if (compareMode === "yoy" || YEAR_ALIGNED_RANGES.has(rangeKey)) {
             prevStart = startOfDay(new Date(start.getFullYear() - 1, start.getMonth(), start.getDate()));
             prevEnd = startOfDay(new Date(end.getFullYear() - 1, end.getMonth(), end.getDate()));
         } else {
@@ -567,7 +573,7 @@ window.THD = window.THD || {};
             prevStart = daysAgo(spanDays - 1, prevEnd);
         }
 
-        return { start, end, spanDays, prevStart, prevEnd };
+        return { start, end, spanDays, prevStart, prevEnd, compareMode };
     }
 
     function inRange(dateStr, start, end) {
@@ -575,13 +581,23 @@ window.THD = window.THD || {};
         return d >= start && d <= end;
     }
 
+    // Whether any row in dailyRows falls inside [start, end] — used
+    // to tell "the comparison period is genuinely all zero" apart
+    // from "there's no data at all to compare against" (e.g. a
+    // same-period-last-year comparison reaching further back than
+    // the data actually goes), so the latter can show a warning
+    // instead of a silently misleading "0.0% change".
+    function hasDataInRange(dailyRows, start, end) {
+        return (dailyRows || []).some((r) => inRange(r.date, start, end));
+    }
+
     /* ==========================================================
        Daily rows -> KPI cards + trend chart
     ========================================================== */
 
-    function filterDailyRange(dailyRows, rangeKey, customRange) {
+    function filterDailyRange(dailyRows, rangeKey, customRange, compareMode = "previous") {
 
-        const { start, end, prevStart, prevEnd } = resolveRange(rangeKey, customRange);
+        const { start, end, prevStart, prevEnd } = resolveRange(rangeKey, customRange, compareMode);
 
         const current = dailyRows.filter((r) => inRange(r.date, start, end));
         const previous = dailyRows.filter((r) => inRange(r.date, prevStart, prevEnd));
@@ -640,10 +656,15 @@ window.THD = window.THD || {};
         return `<span class="insightNum ${sentiment}">${text}</span>`;
     }
 
-    function buildInsights(kpi, channels) {
+    // hasCompareData: skip every delta-dependent sentence (revenue
+    // change, biggest mover, CVR change) when the comparison window
+    // has no underlying data — see hasDataInRange — rather than
+    // reporting a misleading "decreased by 0.0%" derived from an
+    // all-zero previous period.
+    function buildInsights(kpi, channels, hasCompareData = true) {
         const insights = [];
 
-        if (kpi && kpi.revenue) {
+        if (hasCompareData && kpi && kpi.revenue) {
             const d = kpi.revenue.delta;
             const figure = highlight(`${Math.abs(d).toFixed(1)}%`, d >= 0 ? "pos" : "neg");
             const direction = window.I18N.t(d >= 0 ? "insight.increased" : "insight.decreased");
@@ -669,7 +690,7 @@ window.THD = window.THD || {};
             }
         }
 
-        if (kpi) {
+        if (hasCompareData && kpi) {
             const movers = [
                 { key: "users", labelKey: "insight.mover.users" },
                 { key: "sessions", labelKey: "insight.mover.sessions" },
@@ -687,7 +708,7 @@ window.THD = window.THD || {};
             }
         }
 
-        if (kpi && kpi.cvr) {
+        if (hasCompareData && kpi && kpi.cvr) {
             const d = kpi.cvr.delta;
             const figure = highlight(`${kpi.cvr.value.toFixed(2)}%`, d >= 0 ? "pos" : "neg");
             const direction = window.I18N.t(d >= 0 ? "insight.cvrImproved" : "insight.cvrDeclined");
@@ -1290,6 +1311,107 @@ window.THD = window.THD || {};
     const RISING_PAGE_MIN_PREV_SESSIONS = 10;
     const RISING_PAGE_THRESHOLD_PCT = 100;
 
+    /* ==========================================================
+       Overview "Today/Yesterday Spike" Insights
+       A different question again from both the signal above (best
+       riser over a rolling 7 days) and buildLandingPageInsights'
+       own single-day-spike signal (the ONE biggest spike anywhere
+       in the last 30 days): this checks specifically whether TODAY
+       or YESTERDAY — the two most recent dates actually present in
+       the data, since GA4's own processing lag means "today" here
+       is whatever the freshest row is, not necessarily today's real
+       calendar date — was a spike day for ANY content page, and
+       surfaces every page that qualifies rather than only the
+       single biggest one. A spike from three days ago is old news
+       by the time the rolling-7-day riser signal would catch it;
+       the point here is "is something unusual happening right now",
+       for as many pages as that's actually true of today.
+    ========================================================== */
+
+    const TODAY_YESTERDAY_SPIKE_Z_THRESHOLD = 2;
+    const TODAY_YESTERDAY_SPIKE_MIN_MEAN = 3; // needs a real baseline, not near-zero noise
+
+    function buildTodayYesterdaySpikeInsights(landingRows) {
+        const win = resolveLast30DayWindow(landingRows);
+        if (!win) return [];
+
+        const contentRows = landingRows.filter((r) => r.date >= win.startStr && r.date <= win.endStr && r.pageType !== "system");
+        if (!contentRows.length) return [];
+
+        const todayStr = win.endStr;
+        const yesterdayDate = new Date(win.endStr);
+        yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+        const yesterdayStr = yesterdayDate.toISOString().slice(0, 10);
+
+        const allDates = [];
+        for (let d = new Date(win.start); d <= win.end; d.setDate(d.getDate() + 1)) {
+            allDates.push(d.toISOString().slice(0, 10));
+        }
+
+        const byTitle = {};
+        contentRows.forEach((r) => {
+            const key = r.pageTitle || "(not set)";
+            if (!byTitle[key]) byTitle[key] = {};
+            byTitle[key][r.date] = (byTitle[key][r.date] || 0) + r.sessions;
+        });
+
+        const found = [];
+        Object.keys(byTitle).forEach((pageTitle) => {
+            const byDate = byTitle[pageTitle];
+            const values = allDates.map((d) => byDate[d] || 0);
+            const n = values.length;
+            if (n < 5) return;
+
+            const mean = values.reduce((a, b) => a + b, 0) / n;
+            if (mean < TODAY_YESTERDAY_SPIKE_MIN_MEAN) return;
+
+            const variance = values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / n;
+            const stdDev = Math.sqrt(variance);
+            if (!stdDev) return;
+
+            const dailySessions = allDates.map((d) => ({ date: d, sessions: byDate[d] || 0 }));
+
+            [["today", todayStr], ["yesterday", yesterdayStr]].forEach(([dayLabel, dateStr]) => {
+                const value = byDate[dateStr] || 0;
+                const z = (value - mean) / stdDev;
+                if (z >= TODAY_YESTERDAY_SPIKE_Z_THRESHOLD) {
+                    found.push({ pageTitle, dayLabel, date: dateStr, value, mean, dailySessions });
+                }
+            });
+        });
+
+        // Today's spikes first, then yesterday's; within each day, the
+        // most surprising (furthest above its own typical day) first.
+        found.sort((a, b) => {
+            if (a.dayLabel !== b.dayLabel) return a.dayLabel === "today" ? -1 : 1;
+            return (b.value / b.mean) - (a.value / a.mean);
+        });
+
+        // Shaped to match buildRisingLandingPageInsight's return value
+        // (pageTitle/dailySessions/spikeDate/spikeValue/current/
+        // previous) so the exact same click-through — jump to Landing
+        // Pages, open the highlight panel, render the mini chart, open
+        // that day's source breakdown — works for these too with no
+        // separate handler needed. spikeSummary:true tells
+        // renderLandingRisingPanel to show "spiked on {date}" phrasing
+        // instead of the rising-insight's "this week vs last week" one,
+        // since that framing would be wrong for a single-day spike.
+        return found.map((f) => ({
+            pageTitle: f.pageTitle,
+            spikeDate: f.date,
+            spikeValue: f.value,
+            dailySessions: f.dailySessions,
+            current: f.value,
+            baseline: f.mean,
+            spikeSummary: true,
+            sentence: window.I18N.t(f.dayLabel === "today" ? "landingInsight.spikeToday" : "landingInsight.spikeYesterday", {
+                title: `<strong>${f.pageTitle}</strong>`,
+                figure: highlight(Math.round(f.value).toLocaleString("en-US"), "pos"),
+                mean: Math.round(f.mean).toLocaleString("en-US")
+            })
+        }));
+    }
+
     function buildRisingLandingPageInsight(landingRows) {
         const win = resolveLast30DayWindow(landingRows);
         if (!win) return null;
@@ -1628,6 +1750,7 @@ window.THD = window.THD || {};
         buildAnomalyInsights,
         buildChannelAnomalyInsights,
         resolveRange,
+        hasDataInRange,
         filterDailyRange,
         filterSourcesByDates,
         resolveLast30DayWindow,
@@ -1635,6 +1758,7 @@ window.THD = window.THD || {};
         aggregateLandingPages,
         buildLandingPageInsights,
         buildRisingLandingPageInsight,
+        buildTodayYesterdaySpikeInsights,
         buildLandingPageDetail,
         buildTrafficComparison,
         buildChannelTrend,

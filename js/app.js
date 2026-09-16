@@ -21,6 +21,7 @@
     let landingRows = [];     // full per-day-per-path-per-source rows (real or dummy)
     let currentRange = "month";
     let currentCustomRange = null; // { start: Date, end: Date }, only used when currentRange === "custom"
+    let compareMode = "previous"; // "previous" | "yoy" — see #compareModeSelect / resolveRange in data.js
 
     // Drill-down filter: set by clicking a row in the Traffic
     // Comparison table (e.g. "Referral (Other)") to narrow the
@@ -51,6 +52,7 @@
     // language change or device-filter change can refresh it in place
     // instead of leaving it showing stale numbers.
     let risingPageInsight = null;
+    let pageSpikes = []; // "spiking today/yesterday" callouts — see buildTodayYesterdaySpikeInsights
     let risingPanelActiveInsight = null;
     let risingPanelActiveGeneric = false;
 
@@ -382,6 +384,19 @@
                     if (isSpikeDay) totalSessions = Math.round(totalSessions * 1.8);
                 }
 
+                // Demo-only: a second, independent spike — on a
+                // different page, concentrated into a different source
+                // — landing exactly on "today" (daysFromEnd 0), so the
+                // Overview "spiking today/yesterday" insights
+                // (buildTodayYesterdaySpikeInsights) also have
+                // something real to surface out of the box, distinct
+                // from the 7-day riser demo above.
+                const todaySpikeSource = "line / social";
+                const isTodaySpikeDay = idx === 9 && daysFromEnd === 0;
+                if (isTodaySpikeDay) {
+                    totalSessions = Math.round(totalSessions * 3.2);
+                }
+
                 const totalPurchases = pageType === "system" ? 0 : (Math.random() < 0.5 ? Math.round(totalSessions * Math.random() * 0.05) : 0);
                 const totalRevenue = totalPurchases * (7000 + Math.random() * 6000);
 
@@ -389,7 +404,11 @@
                 // random weight (renormalized to sum to totalSessions
                 // exactly, remainder on the last source) — purchases
                 // and revenue follow each source's session share.
-                const weights = sources.map((s) => (isSpikeDay && s === spikeSource ? 4 + Math.random() * 2 : Math.random() + 0.1));
+                const weights = sources.map((s) => {
+                    if (isSpikeDay && s === spikeSource) return 4 + Math.random() * 2;
+                    if (isTodaySpikeDay && s === todaySpikeSource) return 4 + Math.random() * 2;
+                    return Math.random() + 0.1;
+                });
                 const weightSum = weights.reduce((a, b) => a + b, 0);
 
                 let assignedSessions = 0;
@@ -442,7 +461,8 @@
         currentRange = rangeKey;
         currentCustomRange = rangeKey === "custom" ? customRange : null;
 
-        const range = THD.data.resolveRange(rangeKey, currentCustomRange);
+        const range = THD.data.resolveRange(rangeKey, currentCustomRange, compareMode);
+        const hasCompareData = THD.data.hasDataInRange(dailyRows, range.prevStart, range.prevEnd);
 
         // "All Sources" filter: when a specific channel is chosen,
         // everything below is scoped to just that channel's rows —
@@ -456,9 +476,9 @@
             ? dailyRows
             : THD.data.buildDailyRowsFromSources(effectiveSourceRows);
 
-        const filtered = THD.data.filterDailyRange(effectiveDailyRows, rangeKey, currentCustomRange);
-        THD.ui.renderKpis(filtered.kpi);
-        THD.ui.renderRangeCompare(range);
+        const filtered = THD.data.filterDailyRange(effectiveDailyRows, rangeKey, currentCustomRange, compareMode);
+        THD.ui.renderKpis(filtered.kpi, hasCompareData);
+        THD.ui.renderRangeCompare(range, hasCompareData);
         THD.ui.renderTrafficPeriodLabels(range);
 
         THD.charts.renderTrendChart(filtered.labels, filtered.series, THD.ui.getCheckedMetrics(), {
@@ -490,15 +510,23 @@
         const channelAnomalies = THD.data.buildChannelAnomalyInsights(effectiveSourceRows, trafficCurrent.channels, groupBy, range);
 
         const insightSentences = [
-            ...THD.data.buildInsights(filtered.kpi, trafficCurrent.channels),
+            ...THD.data.buildInsights(filtered.kpi, trafficCurrent.channels, hasCompareData),
             ...THD.data.buildAnomalyInsights(filtered.labels, filtered.series)
         ];
 
         THD.ui.renderInsights(insightSentences, {
-            riseInsight: risingPageInsight,
-            onRiseClick: onRisingPageInsightClick,
             channelAnomalies,
             onChannelAnomalyClick: onChannelAnomalyInsightClick
+        });
+
+        // Landing-page anomalies (today/yesterday spikes + the rolling
+        // 7-day riser) get their own Overview section, below Key
+        // Insights — see renderTopLandingPageInsights in ui.js.
+        THD.ui.renderTopLandingPageInsights({
+            riseInsight: risingPageInsight,
+            onRiseClick: onRisingPageInsightClick,
+            pageSpikes,
+            onPageSpikeClick: onRisingPageInsightClick
         });
 
         // Monthly Business Performance recomputed here too (rather
@@ -549,6 +577,7 @@
         const startInput = document.getElementById("customStartDate");
         const endInput = document.getElementById("customEndDate");
         const applyBtn = document.getElementById("applyCustomRange");
+        const compareSelect = document.getElementById("compareModeSelect");
         if (!select) return;
 
         select.addEventListener("change", () => {
@@ -569,6 +598,13 @@
                 renderForRange("custom", { start, end });
             });
         }
+
+        if (compareSelect) {
+            compareSelect.addEventListener("change", () => {
+                compareMode = compareSelect.value;
+                renderForRange(currentRange, currentCustomRange);
+            });
+        }
     }
 
     // Re-renders every piece of JS-generated text (chart legends/
@@ -584,6 +620,7 @@
         // pre-formatted i18n string baked in at build time, same
         // reason the New/Repeat insights below get rebuilt too.
         risingPageInsight = THD.data.buildRisingLandingPageInsight(landingRows);
+        pageSpikes = THD.data.buildTodayYesterdaySpikeInsights(landingRows);
         renderForRange(currentRange, currentCustomRange);
         renderLandingPagesForDevice();
         renderNewRepeatChartOnly();
@@ -802,6 +839,7 @@
         // first renderForRange call — renderForRange is what actually
         // passes it into THD.ui.renderInsights.
         risingPageInsight = THD.data.buildRisingLandingPageInsight(landingRows);
+        pageSpikes = THD.data.buildTodayYesterdaySpikeInsights(landingRows);
 
         renderForRange(currentRange, currentCustomRange);
         renderLandingPagesForDevice();

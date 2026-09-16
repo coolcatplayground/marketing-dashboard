@@ -31,16 +31,35 @@ window.THD = window.THD || {};
        doesn't say what it's being measured against.
     ========================================================== */
 
-    function renderRangeCompare(range) {
+    // hasCompareData: pass false when the resolved comparison window
+    // has no underlying data at all (most likely with "Compare Same
+    // Period Last Year" reaching further back than the data goes) —
+    // shows a warning in place of the comparison dates instead of
+    // silently implying "no change" from an all-zero previous period.
+    function renderRangeCompare(range, hasCompareData = true) {
         const el = document.getElementById("rangeCompareBar");
         if (!el || !range) return;
 
-        el.innerHTML = `
-            <i data-lucide="calendar-range"></i>
-            Looking at <strong>${fmtISODate(range.start)} – ${fmtISODate(range.end)}</strong>
-            <span class="rangeVs">vs previous period</span>
-            <strong>${fmtISODate(range.prevStart)} – ${fmtISODate(range.prevEnd)}</strong>
-        `;
+        const lookingAt = `${window.I18N.t("rangeCompare.lookingAt")} <strong>${fmtISODate(range.start)} – ${fmtISODate(range.end)}</strong>`;
+
+        if (!hasCompareData) {
+            el.innerHTML = `
+                <i data-lucide="calendar-range"></i>
+                ${lookingAt}
+                <span class="rangeVs rangeVsWarning">
+                    <i data-lucide="alert-triangle"></i>
+                    ${window.I18N.t("rangeCompare.noCompareData", { start: fmtISODate(range.prevStart), end: fmtISODate(range.prevEnd) })}
+                </span>
+            `;
+        } else {
+            const compareLabelKey = range.compareMode === "yoy" ? "rangeCompare.vsYoy" : "rangeCompare.vsPrevious";
+            el.innerHTML = `
+                <i data-lucide="calendar-range"></i>
+                ${lookingAt}
+                <span class="rangeVs">${window.I18N.t(compareLabelKey)}</span>
+                <strong>${fmtISODate(range.prevStart)} – ${fmtISODate(range.prevEnd)}</strong>
+            `;
+        }
         if (window.lucide) lucide.createIcons();
     }
 
@@ -142,7 +161,7 @@ window.THD = window.THD || {};
         cvr: { value: fmtPercent, daily: fmtPercent }
     };
 
-    function renderKpis(kpi) {
+    function renderKpis(kpi, hasCompareData = true) {
         Object.entries(kpi).forEach(([key, data]) => {
             const card = document.querySelector(`[data-kpi="${key}"]`);
             const format = KPI_FORMATS[key];
@@ -171,9 +190,18 @@ window.THD = window.THD || {};
             }
 
             if (deltaEl) {
-                deltaEl.textContent = fmtDelta(data.delta);
-                deltaEl.classList.remove("positive", "negative");
-                deltaEl.classList.add(data.delta >= 0 ? "positive" : "negative");
+                deltaEl.classList.remove("positive", "negative", "neutral");
+                if (hasCompareData) {
+                    deltaEl.textContent = fmtDelta(data.delta);
+                    deltaEl.classList.add(data.delta >= 0 ? "positive" : "negative");
+                } else {
+                    // Comparison window has no underlying data at all
+                    // (see hasDataInRange in data.js) — showing "0.0%"
+                    // here would read as "no change" rather than "no
+                    // data to compare against".
+                    deltaEl.textContent = window.I18N.t("kpi.noCompareData");
+                    deltaEl.classList.add("neutral");
+                }
             }
 
             if (dailyEl) dailyEl.textContent = format.daily(data.daily);
@@ -377,12 +405,26 @@ window.THD = window.THD || {};
         const summaryEl = document.getElementById("landingRisingPanelSummary");
         const spikeEl = document.getElementById("landingRisingPanelSpike");
 
-        if (iconEl) iconEl.textContent = generic ? "📊" : "📈";
-        if (labelEl) labelEl.textContent = window.I18N.t(generic ? "landing.pageDetailTitle" : "landing.risingPanelTitle");
+        if (iconEl) iconEl.textContent = insight.spikeSummary ? "⚡" : (generic ? "📊" : "📈");
+        if (labelEl) labelEl.textContent = window.I18N.t(insight.spikeSummary ? "landing.spikePanelTitle" : (generic ? "landing.pageDetailTitle" : "landing.risingPanelTitle"));
         if (titleEl) titleEl.textContent = insight.pageTitle;
 
         if (summaryEl) {
-            if (insight.changePct === null || insight.changePct === undefined) {
+            if (insight.spikeSummary) {
+                // A single-day spike vs. this page's own typical day —
+                // deliberately not framed as "this week vs last week"
+                // like the branches below, since that comparison isn't
+                // what triggered this insight (see
+                // buildTodayYesterdaySpikeInsights in data.js).
+                const changePct = insight.baseline ? ((insight.current - insight.baseline) / insight.baseline) * 100 : 0;
+                const figure = `<span class="insightNum pos">+${Math.round(changePct)}%</span>`;
+                summaryEl.innerHTML = window.I18N.t("landing.spikePanelSummary", {
+                    current: Math.round(insight.current).toLocaleString("en-US"),
+                    baseline: Math.round(insight.baseline).toLocaleString("en-US"),
+                    date: insight.spikeDate,
+                    figure
+                });
+            } else if (insight.changePct === null || insight.changePct === undefined) {
                 summaryEl.innerHTML = window.I18N.t("landing.risingPanelWeekNew", {
                     current: Math.round(insight.current).toLocaleString("en-US")
                 });
@@ -562,34 +604,28 @@ window.THD = window.THD || {};
        Key Insights
     ========================================================== */
 
-    // riseInsight/onRiseClick are optional — when present, the "rising
-    // landing page" insight (buildRisingLandingPageInsight in data.js)
-    // is appended as its own clickable <li>, styled distinctly so it
-    // reads as "click for detail" rather than a plain fact like the
-    // others in this list.
-    // opts: { riseInsight, onRiseClick, channelAnomalies, onChannelAnomalyClick }
-    // riseInsight is the single Overview "rising landing page" callout
-    // (see buildRisingLandingPageInsight); channelAnomalies is zero or
-    // more Traffic Sources anomalies (see buildChannelAnomalyInsights)
-    // — both render as clickable list items, distinguished from plain
-    // insight text by the .insightClickable class, but wired up
-    // separately since they jump to different places (Landing Pages
-    // detail panel vs. the Traffic Sources channel-trend view).
+    // opts: { channelAnomalies, onChannelAnomalyClick }
+    // Key Insights is now KPI-focused only: the plain sentence-level
+    // insights (buildInsights/buildAnomalyInsights) plus zero or more
+    // Traffic Sources channel anomalies (see buildChannelAnomalyInsights)
+    // — channel-level, not landing-page-specific, so it stays here.
+    // Everything landing-page-related (the "rising landing page" callout
+    // and today/yesterday page spikes) lives in its own section now —
+    // see renderTopLandingPageInsights below — so a busy day with many
+    // spiking pages doesn't crowd out the KPI-level story here.
     function renderInsights(insights, opts) {
         opts = opts || {};
-        const { riseInsight, onRiseClick, channelAnomalies, onChannelAnomalyClick } = opts;
-        const container = document.querySelector(".insightCard ul");
+        const { channelAnomalies, onChannelAnomalyClick } = opts;
+        const container = document.getElementById("keyInsightsList");
         if (!container) return;
 
-        const items = (insights || []).map((text) => `<li>${text}</li>`);
+        const items = [];
+
+        items.push(...(insights || []).map((text) => `<li>${text}</li>`));
 
         (channelAnomalies || []).forEach((a, i) => {
             items.push(`<li class="insightClickable" data-anomaly-idx="${i}">${a.sentence}</li>`);
         });
-
-        if (riseInsight) {
-            items.push(`<li class="insightClickable" id="risingPageInsightItem">${riseInsight.sentence}</li>`);
-        }
 
         if (!items.length) {
             container.innerHTML = `<li>${window.I18N.t("insights.empty")}</li>`;
@@ -604,11 +640,50 @@ window.THD = window.THD || {};
                 el.addEventListener("click", () => onChannelAnomalyClick(channelAnomalies[idx]));
             });
         }
+    }
 
-        if (riseInsight && onRiseClick) {
-            const el = document.getElementById("risingPageInsightItem");
-            if (el) el.addEventListener("click", () => onRiseClick(riseInsight));
+    // opts: { riseInsight, onRiseClick, pageSpikes, onPageSpikeClick }
+    // Groups the two landing-page-anomaly signals into their own
+    // Overview section, below Key Insights: pageSpikes (zero or more —
+    // see buildTodayYesterdaySpikeInsights) and the single riseInsight
+    // (see buildRisingLandingPageInsight's rolling-7-day callout).
+    // Combined into one list and sorted by session count (`current`)
+    // descending, so whichever page actually had the biggest influx
+    // leads regardless of which detector caught it, rather than always
+    // listing today's spikes, then yesterday's, then the riser, in
+    // that fixed order irrespective of size. Both item types render as
+    // clickable list items and jump to the same Landing Pages detail
+    // panel. The whole card hides itself when there's nothing to show,
+    // same pattern as the Landing Pages tab's own insights card
+    // (renderLandingPageInsights) — no empty-state text needed here.
+    function renderTopLandingPageInsights(opts) {
+        opts = opts || {};
+        const { riseInsight, onRiseClick, pageSpikes, onPageSpikeClick } = opts;
+        const card = document.getElementById("topLandingPageInsightsCard");
+        const container = document.getElementById("topLandingPageInsightsList");
+        if (!card || !container) return;
+
+        const combined = (pageSpikes || []).map((s) => ({ kind: "spike", data: s }));
+        if (riseInsight) combined.push({ kind: "rise", data: riseInsight });
+
+        combined.sort((a, b) => (b.data.current || 0) - (a.data.current || 0));
+
+        if (!combined.length) {
+            card.style.display = "none";
+            container.innerHTML = "";
+            return;
         }
+
+        card.style.display = "";
+        container.innerHTML = combined.map((item) => `<li class="insightClickable">${item.data.sentence}</li>`).join("");
+
+        container.querySelectorAll("li.insightClickable").forEach((el, i) => {
+            const item = combined[i];
+            el.addEventListener("click", () => {
+                if (item.kind === "spike" && onPageSpikeClick) onPageSpikeClick(item.data);
+                if (item.kind === "rise" && onRiseClick) onRiseClick(item.data);
+            });
+        });
     }
 
     /* ==========================================================
@@ -1367,6 +1442,7 @@ window.THD = window.THD || {};
         renderKpis,
         showInitialSkeletons,
         renderInsights,
+        renderTopLandingPageInsights,
         renderRangeCompare,
         renderDataSourceWarning,
         renderTrafficPeriodLabels,

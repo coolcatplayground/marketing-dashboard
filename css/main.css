@@ -426,6 +426,12 @@ select:focus{
 
 }
 
+.neutral{
+
+    color:var(--text-light);
+
+}
+
 .textLight{
 
     color:var(--text-light);
