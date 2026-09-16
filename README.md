@@ -1,154 +1,45 @@
 # CoolCat Analytics Dashboard
 
-An e-commerce analytics dashboard that turns four raw data exports into a single
-bilingual (日本語 / English) decision surface — KPIs, channel attribution, landing-page
-performance, and new-vs-repeat customer economics — with written insights generated from
-the numbers rather than left for the reader to infer.
+### Did revenue move this week, and why?
 
-Built as a working internal tool for an online shop, then sanitized into this public
-portfolio build. Static HTML/CSS/JS: no framework, no bundler, no build step.
+An e-commerce marketing dashboard built for the team at my workplace, rebuilt here with a fictional cat-supply shop. It pulls four separate data exports into one bilingual (日本語 / English) page and, instead of leaving you to squint at charts, **writes out what changed** in plain sentences.
 
-**[▶ Live demo](https://coolcatplayground.github.io/marketing-dashboard/)** · runs entirely
-on generated sample data
+**[▶ Open the live demo](https://coolcatplayground.github.io/marketing-dashboard/)** — every number is generated sample data, so the yellow "demo data" banner always shows. That's intended.
 
 ---
 
-## The problem it solves
+## Field notes: the creature in the wild
 
-The shop's weekly review ran on four disconnected exports: a GA4 daily rollup, a GA4
-source breakdown, a GA4 landing-page report, and a new-vs-repeat customer spreadsheet.
-Answering "did revenue move, and why" meant opening all four, aligning them by hand on
-mismatched date conventions, and rebuilding the same pivot every week. The numbers existed;
-the reading of them was the work, and it was redone from scratch every time.
+The weekly marketing review ran on four exports that didn't talk to each other: daily GA4 totals, traffic by source, landing-page traffic, and a new-versus-repeat customer spreadsheet. Answering "did revenue move, and why?" meant opening all four, lining them up by hand across mismatched date formats, and rebuilding the same pivot table every single week.
 
-This dashboard makes that reading reproducible. It ingests all four feeds, reconciles them
-onto one date model, and writes the interpretation out as text — so the weekly review starts
-from a stated conclusion that can be argued with, instead of from a blank pivot table.
+The numbers were all there. The *reading* of them was the work, and it started from zero every time. This dashboard does that reading once, the same way every time, so the meeting starts from a written conclusion people can argue with instead of a blank pivot table.
 
-## What it demonstrates
+## A tour of the rooms
 
-Data modelling across mismatched sources · analytical judgment about which metrics are
-trustworthy · generated narrative insight rather than raw chart dumps · a bilingual
-architecture that survives interactive filtering · graceful degradation when upstream
-data fails · clean data/presentation separation in plain JavaScript.
+**Overview.** Headline numbers (users, sessions, purchases, revenue, conversion rate) against a comparison period, a trend chart with an optional 7-day moving average, and **Key Insights**: short sentences about what changed, which channel led, and which days looked unusual.
 
----
+- **Compare against the previous period or the same period last year.** Handy when a month is naturally busy, so this December is judged against last December rather than November.
+- **Top Landing Pages Insights** is its own card now. It flags any page **spiking today or yesterday** compared with its usual day, plus the page that has risen the most over the past week. Biggest influx first, and a click opens that page's detail with the day's traffic sources.
 
-## Selected engineering decisions
+**Traffic.** Where visitors came from this period versus last, grouped by ad platform or by channel. Click a channel to filter everything to it and see its trend. The landing-page table covers the last 30 days, splits PC from smartphone, and can hide system pages (cart, login and so on) that inflate the counts.
 
-These are the choices worth reviewing — each one was a judgment call with a real tradeoff.
+**Sales.** Performance by business month, average order value split into overall / new / repeat, and new-versus-repeat customers with the new-customer share over time.
 
-**Per-page revenue and CVR are deliberately not shown.** GA4 attributes a purchase to
-whichever page *started* the session, so a session-boundary reset mid-checkout credits the
-order-confirmation page rather than the page that actually drove the sale. Landing-page
-revenue would therefore have been a confidently-rendered wrong number. Sessions are
-unaffected by that failure mode, so sessions is the only per-page metric exposed, alongside
-a half-window trend badge. Knowing which chart *not* to draw was the more valuable half of
-this feature.
+**Notes.** A shared team notebook for writing down what actually happened ("magazine feature went out", "site was down Tuesday"). The demo has no database behind it, so this tab shows its not-yet-connected screen.
 
-**Translation happens at display time, never in the data.** Channel and device values stay
-canonical English internally; `i18n.js` (~200 keys, en/ja kept in sync) resolves them only
-at render. Because the click-to-filter drill-downs match on the internal key rather than the
-visible label, switching language mid-session never breaks an active filter — the bug that
-this design exists to prevent.
+**Everywhere.** Full 日本語 / English switching, dark theme, CSV export, and a print layout for PDF.
 
-**Failure is visible, not silent.** Each of the four feeds falls back independently to
-generated sample data, and a banner names exactly which sections are showing demo numbers.
-A dashboard that silently renders stale or fabricated figures is worse than one that
-refuses to load, because nobody can tell the difference from the outside.
+## House rules
 
-**The date model matches the business, not the calendar.** Monthly performance rolls up on
-the shop's own "business month" — the 21st of the prior month through the 20th — because
-that is the boundary their financial reporting already used. Aligning the tool to the
-existing convention mattered more than the tidier calendar-month implementation.
+- **Some charts are deliberately missing.** GA4 credits a sale to the page where the visit *started*, so a visitor whose session resets mid-checkout gets credited to the order-confirmation page. Revenue per landing page would be a confidently wrong number, so the dashboard shows only sessions per page, which that problem doesn't affect.
+- **"No data" never pretends to be "no change."** If the comparison period falls outside the available data (easy to do with same-period-last-year), the percentages say "N/A", the range bar shows a warning, and the insights skip every sentence that depends on the comparison. A silent "0.0%" would have been a lie.
+- **Demo data announces itself.** Each of the four feeds falls back to sample data on its own, and a banner names exactly which sections are showing it. A dashboard that quietly shows made-up numbers is worse than one that refuses to load.
+- **The month follows the business, not the calendar.** Monthly figures run from the 21st to the 20th, because that's the boundary the company's financial reporting already uses.
+- **Insights state facts, not orders.** The sentences report what changed. They stop short of "you should…", because the dashboard doesn't know the commercial context behind the numbers, and pretending it did would undermine the parts it gets right.
+- **Switching language never breaks a filter.** Channel names are translated only on screen, so an active filter keeps working when you switch languages mid-session.
 
-**Insights are factual, never prescriptive.** Generated statements report what changed
-(revenue and CVR deltas, top channel by revenue, `(not set)` attribution gap, z-score
-anomalies against the period's own baseline). They stop short of "you should…" — the tool
-does not have the commercial context to earn that sentence, and pretending otherwise erodes
-trust in the numbers it *is* right about.
+## Construction
 
----
+The questions, the metrics that are worth trusting, and the house rules above came from using this in real weekly reviews. The dashboard itself was built with generative AI under my direction.
 
-## Features
-
-**Overview** — KPI cards versus previous period; multi-metric trend chart with optional
-7-day moving average; generated Key Insights; a Rising Landing Page callout that ignores the
-main date picker to always compare the last 7 days against the 7 before, firing only when a
-page clears a noise floor and at least doubles week-over-week.
-
-**Traffic** — current-vs-previous doughnuts grouped by ad platform or GA4 channel; click any
-channel to filter the source table and swap both doughnuts for that channel's trend line;
-raw source/medium table; 30-day landing-page table with PC/smartphone filtering, click-through
-detail panels, and content-vs-system page classification.
-
-**Sales** — business-month performance rollup; AOV trend split by overall / new / repeat;
-new-vs-repeat stacked bars with new-customer-share line; full customer history table.
-
-**Notes** — team notes synced through Firestore, with a built-in unconfigured state.
-
-**Throughout** — full 日本語 / English switching, dark theme, CSV export, and a dedicated
-print stylesheet for PDF output.
-
----
-
-## Stack
-
-Vanilla JavaScript, no framework or bundler. Chart.js for rendering, PapaParse for CSV,
-Lucide for icons, Firebase compat SDK for the notes tab — all from CDN.
-
-```
-index.html
-css/    main · layout · cards · charts · tables · dark · print
-js/
-  data.js     loading, parsing, aggregation, classification — never touches the DOM
-  ui.js       all DOM rendering and wiring — never fetches or aggregates
-  charts.js   Chart.js rendering
-  i18n.js     en/ja dictionary and formatting helpers
-  notes.js    Firestore CRUD
-  goals.js    monthly targets (Firestore, currently unwired)
-  export.js   CSV download and print-to-PDF
-  app.js      orchestration — the only file that calls both data and ui
-```
-
-`data.js` and `ui.js` are strictly separated so the analysis layer stays testable and the
-rendering layer stays swappable. `app.js` is the single seam between them.
-
-## Run it locally
-
-```bash
-python3 -m http.server 8000    # then open http://localhost:8000
-```
-
----
-
-## About this build
-
-This is a sanitized copy of a tool built for a real client. The original's data-source URLs,
-passcode gate, and Firebase project have been removed; the brand is fictional and all
-product and landing-page names are invented. Every figure on the page is generated sample
-data — nothing here reaches a real spreadsheet, GA4 property, or backend. The warning banner
-therefore always shows, which is the intended behaviour.
-
-The analysis logic, classification rules, chart and table behaviour, export paths, and print
-stylesheet are unchanged from the production build, since those are the point of the demo.
-
-<details>
-<summary><b>Wiring it to real data</b></summary>
-
-Four published-CSV URLs go in the `CONFIG` object at the top of `js/data.js`
-(`GA4_DAILY_CSV_URL`, `GA4_SOURCES_CSV_URL`, `GA4_LANDING_PAGES_CSV_URL`,
-`NEW_REPEAT_CSV_URL`). Publish each sheet via File → Share → Publish to web → CSV, and match
-the columns documented above each loader function. Any feed left blank falls back to sample
-data.
-
-The Notes tab needs a Firestore project: create one, add a web app, and paste the config into
-`FIREBASE_CONFIG` in both `js/notes.js` and `js/goals.js`. Scope the rules to the `notes` and
-`targets` collections — and note that permissive rules leave anyone with the link able to
-write, which is acceptable for an internal tool behind a private URL and not acceptable for a
-public deployment.
-
-Local CSS/JS references carry a `?v=N` cache-busting query string. Bump it on every deploy or
-browsers will serve stale files indefinitely.
-
-</details>
+This public version runs on generated sample data with a fictional brand. The internal version's data connections, passcode screen and team database are not included, and no company data appears anywhere in this repository.
