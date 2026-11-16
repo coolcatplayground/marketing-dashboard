@@ -540,7 +540,7 @@ select:focus{
 
 /* ==========================================================
    Skeleton Loading
-   Applied via THD.ui's skeleton helpers (ui.js) to KPI values
+   Applied via CoolCat.ui's skeleton helpers (ui.js) to KPI values
    and table/list bodies while the first data fetch is in
    flight, then cleared the moment real content is rendered.
 ========================================================== */
@@ -618,5 +618,5 @@ select:focus{
    was pulled from index.html when the Monthly Targets feature was
    paused before shipping (js/goals.js and the KPI card progress
    bars are still in place, just disconnected — see js/app.js's
-   init() and thd-dashboard-changelog.md item 11 for how to bring
+   init() and the changelog item 11 for how to bring
    the whole thing back, form included). */

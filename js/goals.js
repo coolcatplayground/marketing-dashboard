@@ -1,12 +1,6 @@
 /* ==============================================================
    CoolCat Dashboard — Monthly Targets / Goals (Firebase / Firestore)
    ==============================================================
-   Portfolio / demo build: FIREBASE_CONFIG below is left as the
-   REPLACE_ME placeholder on purpose, so this ships with no real
-   database credentials. isConfigured() returns false, and target
-   progress bars fall back to their built-in "no target set" state
-   — nothing here talks to a real backend.
-
    Same Firebase project as js/notes.js (team notes) — targets are
    just a second collection in the same database, so there's only
    one Firestore project to set up. One shared document holds every
@@ -39,9 +33,9 @@
    FIREBASE_CONFIG below is deliberately the same object.
    ============================================================== */
 
-window.THD = window.THD || {};
+window.CoolCat = window.CoolCat || {};
 
-(function (THD) {
+(function (CoolCat) {
     "use strict";
 
     // Same project as js/notes.js — see that file if this needs
@@ -75,7 +69,7 @@ window.THD = window.THD || {};
             configured = true;
             return true;
         } catch (e) {
-            console.warn("[THD.goals] Firebase init failed:", e.message);
+            console.warn("[CoolCat.goals] Firebase init failed:", e.message);
             return false;
         }
     }
@@ -101,7 +95,7 @@ window.THD = window.THD || {};
                 onChange(targets);
             },
             (err) => {
-                console.warn("[THD.goals] Firestore subscription failed:", err.message);
+                console.warn("[CoolCat.goals] Firestore subscription failed:", err.message);
                 onChange({});
             }
         );
@@ -129,11 +123,11 @@ window.THD = window.THD || {};
         return FIREBASE_CONFIG.apiKey !== "REPLACE_ME";
     }
 
-    THD.goals = {
+    CoolCat.goals = {
         subscribe,
         save,
         isConfigured,
         METRICS
     };
 
-})(window.THD);
+})(window.CoolCat);

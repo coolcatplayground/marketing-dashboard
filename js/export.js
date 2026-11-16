@@ -13,7 +13,7 @@
       actually useful to re-open and compute on in a spreadsheet.
 
    2. PDF — no external library, and no hand-built summary either.
-      THD.exportUtil.printCurrentView() just calls window.print();
+      CoolCat.exportUtil.printCurrentView() just calls window.print();
       css/print.css (loaded with media="print") hides the sidebar
       and action buttons and lets the browser print whichever
       .dashboardView tab is currently active exactly as it looks —
@@ -23,9 +23,9 @@
       print dialog to "Save as PDF".
 ========================================================== */
 
-window.THD = window.THD || {};
+window.CoolCat = window.CoolCat || {};
 
-(function (THD) {
+(function (CoolCat) {
 
     /* ==========================================================
        CSV
@@ -34,7 +34,12 @@ window.THD = window.THD || {};
     // Wraps a value in quotes (doubling any internal quotes) only
     // when it actually needs it — commas, quotes, or newlines.
     function csvEscape(value) {
-        const str = value === null || value === undefined ? "" : String(value);
+        let str = value === null || value === undefined ? "" : String(value);
+        // Text that starts like a formula (=, +, -, @, tab, CR) is run as
+        // one by Excel/Sheets when the CSV is opened — source names come
+        // from analytics data anyone can influence, so neutralize it.
+        // Numbers are left alone so negative values stay numeric.
+        if (typeof value === "string" && /^[=+\-@\t\r]/.test(str)) str = "'" + str;
         if (/[",\n\r]/.test(str)) {
             return `"${str.replace(/"/g, '""')}"`;
         }
@@ -81,9 +86,9 @@ window.THD = window.THD || {};
         window.print();
     }
 
-    THD.exportUtil = {
+    CoolCat.exportUtil = {
         downloadCsv,
         printCurrentView
     };
 
-})(window.THD);
+})(window.CoolCat);

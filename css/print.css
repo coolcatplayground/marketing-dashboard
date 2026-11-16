@@ -5,7 +5,7 @@
 
    Loaded with media="print" (see index.html), so everything here
    only applies when the browser is actually printing — triggered
-   by THD.exportUtil.printCurrentView() (js/export.js) calling
+   by CoolCat.exportUtil.printCurrentView() (js/export.js) calling
    window.print() when the header's "Export PDF" button is clicked.
 
    Deliberately NOT a hand-built summary. This prints whichever tab
@@ -61,7 +61,9 @@
        print their current value/checked state, which is exactly
        the filter/toggle information worth keeping in the export. */
     .sidebar,
-    button{
+    .topbar,
+    .storyOpen,
+    button:not(.vital){
 
         display:none !important;
 

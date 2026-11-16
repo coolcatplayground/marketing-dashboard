@@ -1,14 +1,12 @@
 /* ==========================================================
    CoolCat Analytics
    App Init
-   Version 1.0 (portfolio / demo build)
+   Version 1.0
 
    Data flow:
-     THD.data.loadDailyGA4() / loadSources() / loadNewRepeat()
+     CoolCat.data.loadDailyGA4() / loadSources() / loadNewRepeat()
      each try a live Google Sheets CSV (see js/data.js CONFIG)
      and fall back to dummy data below if not configured yet.
-     In this build CONFIG is intentionally empty, so every tab
-     runs on the generated fictional sample data below.
 
    The date-range selector re-filters the already-fetched daily
    and per-day-source rows in memory — no re-fetch on range change.
@@ -19,6 +17,9 @@
     let dailyRows = [];       // full daily GA4 rows (real or dummy), oldest -> newest
     let sourceRows = [];      // full per-day-per-source rows (real or dummy)
     let landingRows = [];     // full per-day-per-path-per-source rows (real or dummy)
+    let adSpendRows = [];     // Ads feed rows (day × campaign); demo rows only when the feed isn't configured
+    let adsProduct = "all";   // Ads tab product filter
+    let lastAdsRange = null;  // range of the last render, so the product filter can re-render the Ads tab alone
     let currentRange = "month";
     let currentCustomRange = null; // { start: Date, end: Date }, only used when currentRange === "custom"
     let compareMode = "previous"; // "previous" | "yoy" — see #compareModeSelect / resolveRange in data.js
@@ -60,23 +61,37 @@
     // click handler / metric toggle can recompute without redoing the
     // whole period's work.
     let currentRangeObj = null;
+    let lastFiltered = null; // last filterDailyRange result — reused by metric toggles so the chart keeps the source filter
     let currentEffectiveSourceRows = [];
-    let currentGroupBy = "platform";
+    let lastTrafficTree = [];
+    let sourcesCurrentSplit = [];   // current period, one row per source/medium + GA4 channel
+    let lastSourceTableRows = [];   // exactly what the Session Source table shows (for CSV export)
+
+    // activeSourceFilter is { groupBy: "channel"|"platform"|"source", label } or null.
+    const sameFilter = (a, b) => !!a && !!b && a.groupBy === b.groupBy && a.label === b.label &&
+        (a.platform || "") === (b.platform || "") && (a.channel || "") === (b.channel || "");
+
+    function refreshTrafficSelection() {
+        CoolCat.ui.renderTrafficTree(null, activeSourceFilter, null);
+        renderFilteredSourceTable();
+        renderChannelTrendOrDoughnuts();
+    }
 
     function renderChannelTrendOrDoughnuts() {
         if (!activeSourceFilter) {
-            THD.ui.hideChannelTrendMode();
+            CoolCat.ui.hideChannelTrendMode();
             return;
         }
-        const trendData = THD.data.buildChannelTrend(currentEffectiveSourceRows, activeSourceFilter, currentGroupBy, currentRangeObj);
-        THD.ui.showChannelTrendMode(activeSourceFilter);
-        THD.charts.renderChannelTrendChart("trafficChannelTrendChart", activeSourceFilter, trendData, THD.ui.getChannelTrendMetric());
+        const { groupBy, label } = activeSourceFilter;
+        // Pre-scope the rows (platform / channel parents), then trend the label.
+        const scoped = currentEffectiveSourceRows.filter((r) => CoolCat.data.matchesTrafficFilter(r, activeSourceFilter));
+        const trendData = CoolCat.data.buildChannelTrend(scoped, label, groupBy, currentRangeObj);
+        CoolCat.ui.showChannelTrendMode(CoolCat.ui.trafficFilterTitle(activeSourceFilter));
+        CoolCat.charts.renderChannelTrendChart("trafficChannelTrendChart", label, trendData, CoolCat.ui.getChannelTrendMetric());
     }
+    let dataFeedState = { daily: "live", sources: "live", landingPages: "live", newRepeat: "live" }; // "live" | "failed" | "demo"
     let dataSourceStatus = { daily: true, sources: true, landingPages: true, newRepeat: true }; // true = live data loaded successfully; false = fell back to demo data
 
-    // Portfolio / demo build: no real spreadsheet backs this dashboard,
-    // so the source note renders as plain text (no live link) instead
-    // of pointing at an actual document.
     function renderNewRepeatSourceNote() {
         const el = document.getElementById("newRepeatSourceNote");
         if (!el) return;
@@ -85,33 +100,37 @@
     }
 
     function renderFilteredSourceTable() {
-        const rows = activeSourceFilter
-            ? sourcesCurrentForFilter.filter((r) => THD.data.classifyForGroupBy(r, THD.ui.getTrafficGroupBy()) === activeSourceFilter)
+        const f = activeSourceFilter;
+        // Filtered views use the channel-split rows so a channel/scoped
+        // filter counts exactly that channel's share of a source/medium.
+        const rows = f
+            ? sourcesCurrentSplit.filter((r) => CoolCat.data.matchesTrafficFilter(r, f))
             : sourcesCurrentForFilter;
-        THD.ui.renderSourceTable(rows);
-        THD.ui.renderSourceFilterStatus(activeSourceFilter);
+        lastSourceTableRows = rows;
+        CoolCat.ui.renderSourceTable(rows);
+        CoolCat.ui.renderSourceFilterStatus(activeSourceFilter);
     }
 
     function renderNewRepeatChartOnly() {
-        THD.charts.renderNewRepeatChart(newRepeatRows);
+        CoolCat.ui.renderCustomerFlow(newRepeatRows, fullNewRepeatRows);
         renderAovChartOnly();
     }
 
     function renderAovChartOnly() {
-        THD.charts.renderAovChart(newRepeatRows, THD.ui.getCheckedMetrics("aovMetricToggles"));
+        CoolCat.charts.renderAovChart(newRepeatRows, CoolCat.ui.getCheckedMetrics("aovMetricToggles"));
     }
 
     // Top Landing Pages ignores the global date-range picker (fixed
     // 30-day window instead — see aggregateLandingPages), so it only
     // needs to re-render itself when the device filter changes.
     function renderLandingPagesForDevice() {
-        const device = THD.ui.getLandingDevice();
-        const excludeSystem = THD.ui.getHideSystemPages();
-        const rows = THD.data.aggregateLandingPages(landingRows, device, 50, excludeSystem);
-        THD.ui.renderLandingPages(rows);
-        THD.ui.renderLandingPageInsights(THD.data.buildLandingPageInsights(landingRows));
-        const win = THD.data.resolveLast30DayWindow(landingRows);
-        if (win) THD.ui.renderLandingPagesPeriodLabel(win.startStr, win.endStr);
+        const device = CoolCat.ui.getLandingDevice();
+        const excludeSystem = CoolCat.ui.getHideSystemPages();
+        const rows = CoolCat.data.aggregateLandingPages(landingRows, device, 50, excludeSystem);
+        CoolCat.ui.renderLandingPages(rows);
+        CoolCat.ui.renderLandingPageInsights(CoolCat.data.buildLandingPageInsights(landingRows));
+        const win = CoolCat.data.resolveLast30DayWindow(landingRows);
+        if (win) CoolCat.ui.renderLandingPagesPeriodLabel(win.startStr, win.endStr);
 
         // If a page-detail panel (opened by clicking a row — see
         // onLandingPageItemClick) is currently open, refresh it against
@@ -120,12 +139,13 @@
         // (opened from the Overview insight) intentionally ignores the
         // device filter, same as the insight itself, so it's left as-is.
         if (risingPanelActiveInsight && risingPanelActiveGeneric) {
-            const refreshed = THD.data.buildLandingPageDetail(landingRows, risingPanelActiveInsight.pageTitle, device);
+            const refreshed = CoolCat.data.buildLandingPageDetail(landingRows, risingPanelActiveInsight.pageTitle, device);
             if (refreshed) {
+                breakdownDevice = device;
                 risingPanelActiveInsight = refreshed;
-                THD.ui.renderLandingRisingPanel(refreshed, { generic: true });
-                THD.ui.resetSourceBreakdown();
-                THD.charts.renderLandingPageMiniChart("landingRisingPanelChart", refreshed.dailySessions, refreshed.spikeDate,
+                CoolCat.ui.renderLandingRisingPanel(refreshed, { generic: true });
+                CoolCat.ui.resetSourceBreakdown();
+                CoolCat.charts.renderLandingPageMiniChart("landingRisingPanelChart", refreshed.dailySessions, refreshed.spikeDate,
                     (date) => showBreakdownForDate(date, refreshed.pageTitle));
                 if (refreshed.spikeDate) showBreakdownForDate(refreshed.spikeDate, refreshed.pageTitle);
             }
@@ -145,11 +165,19 @@
     // to drill into without needing that context passed back to it.
     let breakdownContext = null;
 
+    // Device the open landing panel is scoped to ("all" for the overview
+    // riser/spikes, the list's device filter for a clicked row) — the
+    // day breakdown must use the same rows the panel's chart used.
+    let breakdownDevice = "all";
+    const landingRowsForDevice = () => (breakdownDevice && breakdownDevice !== "all"
+        ? landingRows.filter((r) => r.device === breakdownDevice)
+        : landingRows);
+
     function showBreakdownForDate(date, pageTitle) {
-        const groupBy = THD.ui.getTrafficGroupBy();
+        const groupBy = CoolCat.ui.getTrafficGroupBy();
         breakdownContext = { date, pageTitle, groupBy };
-        const result = THD.data.buildDayPageSourceBreakdown(landingRows, pageTitle, date, groupBy);
-        THD.ui.renderSourceBreakdown(result, window.I18N.formatDayLabel(date));
+        const result = CoolCat.data.buildDayPageSourceBreakdown(landingRowsForDevice(), pageTitle, date, groupBy);
+        CoolCat.ui.renderSourceBreakdown(result, window.I18N.formatDayLabel(date));
     }
 
     // Click-through for a Traffic Sources anomaly insight (see
@@ -161,12 +189,11 @@
     // existing investigation tools instead of a separate view.
     function onChannelAnomalyInsightClick(anomaly) {
         if (!anomaly || !anomaly.channel) return;
-        THD.ui.switchToView("traffic", () => {
-            THD.charts.resizeCharts();
-            activeSourceFilter = anomaly.channel;
-            THD.ui.renderTrafficComparison(lastTrafficComparisonRows, activeSourceFilter);
-            renderFilteredSourceTable();
-            renderChannelTrendOrDoughnuts();
+        CoolCat.ui.switchToView("traffic", () => {
+            CoolCat.charts.resizeCharts();
+            // Briefing/anomaly channels are platform-level labels.
+            activeSourceFilter = { groupBy: "platform", label: anomaly.channel };
+            refreshTrafficSelection();
             const wrap = document.getElementById("trafficChannelTrendWrap");
             if (wrap) wrap.scrollIntoView({ behavior: "smooth", block: "start" });
         });
@@ -183,11 +210,12 @@
         if (!insight) return;
         risingPanelActiveInsight = insight;
         risingPanelActiveGeneric = false;
-        THD.ui.renderLandingRisingPanel(insight);
-        THD.ui.resetSourceBreakdown();
-        THD.ui.switchToView("traffic", () => {
-            THD.charts.resizeCharts();
-            THD.charts.renderLandingPageMiniChart("landingRisingPanelChart", insight.dailySessions, insight.spikeDate,
+        breakdownDevice = "all";
+        CoolCat.ui.renderLandingRisingPanel(insight);
+        CoolCat.ui.resetSourceBreakdown();
+        CoolCat.ui.switchToView("traffic", () => {
+            CoolCat.charts.resizeCharts();
+            CoolCat.charts.renderLandingPageMiniChart("landingRisingPanelChart", insight.dailySessions, insight.spikeDate,
                 (date) => showBreakdownForDate(date, insight.pageTitle));
             if (insight.spikeDate) showBreakdownForDate(insight.spikeDate, insight.pageTitle);
             const panel = document.getElementById("landingRisingPanel");
@@ -202,15 +230,16 @@
     // the double rAF here too.
     function onLandingPageItemClick(page) {
         if (!page || !page.pageTitle) return;
-        const device = THD.ui.getLandingDevice();
-        const detail = THD.data.buildLandingPageDetail(landingRows, page.pageTitle, device);
+        const device = CoolCat.ui.getLandingDevice();
+        const detail = CoolCat.data.buildLandingPageDetail(landingRows, page.pageTitle, device);
         if (!detail) return;
+        breakdownDevice = device;
         risingPanelActiveInsight = detail;
         risingPanelActiveGeneric = true;
-        THD.ui.renderLandingRisingPanel(detail, { generic: true });
-        THD.ui.resetSourceBreakdown();
+        CoolCat.ui.renderLandingRisingPanel(detail, { generic: true });
+        CoolCat.ui.resetSourceBreakdown();
         requestAnimationFrame(() => requestAnimationFrame(() => {
-            THD.charts.renderLandingPageMiniChart("landingRisingPanelChart", detail.dailySessions, detail.spikeDate,
+            CoolCat.charts.renderLandingPageMiniChart("landingRisingPanelChart", detail.dailySessions, detail.spikeDate,
                 (date) => showBreakdownForDate(date, detail.pageTitle));
             if (detail.spikeDate) showBreakdownForDate(detail.spikeDate, detail.pageTitle);
             const panel = document.getElementById("landingRisingPanel");
@@ -219,8 +248,49 @@
     }
 
     /* ==========================================================
+       Briefing click-throughs
+       Story cards and vital signs on the Overview hand back a
+       small action object (see buildBriefing in data.js); these
+       route each one into the drill-down that already exists for
+       it, so the briefing is a front door to the old views rather
+       than a parallel set of screens.
+    ========================================================== */
+
+    function onBriefAction(action) {
+        if (!action) return;
+        if (action.type === "channel") {
+            onChannelAnomalyInsightClick({ channel: action.channel });
+        } else if (action.type === "page") {
+            onRisingPageInsightClick(action.insight);
+        } else if (action.type === "metric") {
+            CoolCat.ui.plotMetric(action.metric);
+        } else if (action.type === "view") {
+            CoolCat.ui.switchToView(action.view, CoolCat.charts.resizeCharts);
+        }
+    }
+
+    function onVitalPick(vital) {
+        if (!vital) return;
+        if (vital.chart) CoolCat.ui.plotMetric(vital.chart, true);
+        // (every vital, order value included, plots on the briefing's chart)
+    }
+
+    // Most recent date actually present in the data — what "today"
+    // really means for a GA4 export that lags by up to a day.
+    function latestDataDate(rows) {
+        if (!rows || !rows.length) return null;
+        const last = rows[rows.length - 1].date;
+        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(last);
+        return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
+    }
+
+    /* ==========================================================
        Dummy Data (fallback when a live source isn't configured)
     ========================================================== */
+
+    // Portfolio build: js/demo-data.js models one fictional store whose feeds agree with
+    // each other; the random-walk generators below are only a fallback without it.
+    const DEMO = window.CoolCatDemo || null;
 
     function randomWalk(days, start, volatility, floorRatio = 0.3) {
         const out = [];
@@ -253,26 +323,28 @@
     }
 
     const SOURCE_POOL = [
-        // Organic search
-        "google / organic", "yahoo / organic", "bing / organic",
-        // Paid search
-        "google / cpc", "yahoo / cpc", "bing / cpc",
-        // Direct
-        "(direct) / (none)",
-        // Social — organic
-        "instagram / social", "facebook / social", "line / social",
-        "twitter / social", "tiktok / social", "pinterest / social", "youtube / organic",
-        // Social — paid
-        "instagram / cpc", "facebook / cpc", "tiktok / cpc", "twitter / cpc", "youtube / cpc",
-        // Display
-        "criteo / display", "google / display", "yahoo / display", "admanager.google.com / referral",
-        // Email
-        "newsletter / email",
-        // Referral
-        "ameblo.jp / referral", "note.com / referral", "rakuten / referral",
-        "adclick.g.doubleclick.net / referral", "aosorahiroba.jugem.jp / referral",
-        "biopaste.jp / referral", "a20.hm-f.jp / referral", "a05.hm-f.jp / referral"
+        "google / cpc", "google / organic", "(direct) / (none)", "yahoo / organic",
+        "instagram / social", "line / social", "facebook / social", "yahoo / cpc",
+        "facebook / cpc", "instagram / cpc",
+        "newsletter / email", "ameblo.jp / referral", "rakuten / referral",
+        "criteo / display", "bing / organic", "twitter / social", "pinterest / social",
+        "hatenablog.com / referral", "note.com / referral", "admanager.google.com / referral",
+        "adclick.g.doubleclick.net / referral", "px.a8.net / referral", "af.moshimo.com / referral"
     ];
+
+    // Campaign names randomly attached to the paid rows above, so the
+    // demo traffic data has campaign-tagged paid rows. "google / cpc"
+    // rows get a Google campaign; "facebook / cpc" / "instagram / cpc"
+    // get a Meta one — everything else stays campaign: null, same as
+    // it would on a sheet that hasn't added the column yet.
+    const GOOGLE_CAMPAIGNS = ["Brand_Search", "NonBrand_Search", "Shopping_Feed"];
+    const META_CAMPAIGNS = ["Prospecting_LAL", "Retargeting_DPA", "IG_Stories_Awareness"];
+
+    function randomCampaignFor(sourceMedium) {
+        if (sourceMedium === "google / cpc") return GOOGLE_CAMPAIGNS[Math.floor(Math.random() * GOOGLE_CAMPAIGNS.length)];
+        if (sourceMedium === "facebook / cpc" || sourceMedium === "instagram / cpc") return META_CAMPAIGNS[Math.floor(Math.random() * META_CAMPAIGNS.length)];
+        return null;
+    }
 
     function buildDummySourcesDaily(days = 900) {
         const rows = [];
@@ -286,7 +358,7 @@
                 const users = Math.round(sessions * (0.75 + Math.random() * 0.2));
                 const purchases = Math.random() < 0.5 ? Math.round(sessions * Math.random() * 0.04) : 0;
                 const revenue = purchases * (7000 + Math.random() * 6000);
-                rows.push({ sourceMedium: name, date: dateStr, sessions, users, purchases, revenue, channel: null });
+                rows.push({ sourceMedium: name, date: dateStr, sessions, users, purchases, revenue, channel: null, campaign: randomCampaignFor(name) });
             });
         }
         return rows;
@@ -330,7 +402,7 @@
         const spikeSource = "instagram / social";
 
         LANDING_PAGE_POOL.forEach(({ landingPage, pageTitle }, idx) => {
-            const pageType = THD.data.classifyLandingPageType(landingPage, pageTitle);
+            const pageType = CoolCat.data.classifyLandingPageType(landingPage, pageTitle);
             // Demo data has no real per-domain device signal to model, so
             // this stays a simple URL-based guess (unlike the real
             // loadLandingPages, which now reads GA4's actual device
@@ -461,8 +533,8 @@
         currentRange = rangeKey;
         currentCustomRange = rangeKey === "custom" ? customRange : null;
 
-        const range = THD.data.resolveRange(rangeKey, currentCustomRange, compareMode);
-        const hasCompareData = THD.data.hasDataInRange(dailyRows, range.prevStart, range.prevEnd);
+        const range = CoolCat.data.resolveRange(rangeKey, currentCustomRange, compareMode);
+        const hasCompareData = CoolCat.data.hasDataInRange(dailyRows, range.prevStart, range.prevEnd);
 
         // "All Sources" filter: when a specific channel is chosen,
         // everything below is scoped to just that channel's rows —
@@ -471,58 +543,119 @@
         // Left at "all", nothing changes from before this feature.
         const effectiveSourceRows = sourceFilterChannel === "all"
             ? sourceRows
-            : sourceRows.filter((r) => THD.data.classifyForGroupBy(r, "channel") === sourceFilterChannel);
+            : sourceRows.filter((r) => CoolCat.data.classifyForGroupBy(r, "platform") === sourceFilterChannel);
         const effectiveDailyRows = sourceFilterChannel === "all"
             ? dailyRows
-            : THD.data.buildDailyRowsFromSources(effectiveSourceRows);
+            : CoolCat.data.buildDailyRowsFromSources(effectiveSourceRows);
 
-        const filtered = THD.data.filterDailyRange(effectiveDailyRows, rangeKey, currentCustomRange, compareMode);
-        THD.ui.renderKpis(filtered.kpi, hasCompareData);
-        THD.ui.renderRangeCompare(range, hasCompareData);
-        THD.ui.renderTrafficPeriodLabels(range);
+        const filtered = CoolCat.data.filterDailyRange(effectiveDailyRows, rangeKey, currentCustomRange, compareMode);
+        lastFiltered = filtered;
+        CoolCat.ui.renderBriefHeader(range, hasCompareData, latestDataDate(effectiveDailyRows));
+        CoolCat.ui.renderVitals(filtered.kpi, filtered.series, hasCompareData, onVitalPick, range.partial);
+        CoolCat.ui.renderRangeCompare(range, hasCompareData);
+        CoolCat.ui.renderTrafficPeriodLabels(range);
 
-        THD.charts.renderTrendChart(filtered.labels, filtered.series, THD.ui.getCheckedMetrics(), {
-            showTrendOverlay: THD.ui.getTrendOverlayState()
+        CoolCat.charts.renderTrendChart(filtered.labels, filtered.series, CoolCat.ui.getCheckedMetrics(), {
+            showTrendOverlay: CoolCat.ui.getTrendOverlayState()
         });
 
         // Session Source table stays on the current period only.
-        const sourcesCurrent = THD.data.filterSourcesByDates(effectiveSourceRows, range.start, range.end);
+        const sourcesCurrent = CoolCat.data.filterSourcesByDates(effectiveSourceRows, range.start, range.end);
         sourcesCurrentForFilter = sourcesCurrent;
         renderFilteredSourceTable();
 
         // Traffic Sources doughnuts: same current window, plus the
         // matching previous window, both grouped the same way.
-        const sourcesPrevious = THD.data.filterSourcesByDates(effectiveSourceRows, range.prevStart, range.prevEnd);
-        const groupBy = THD.ui.getTrafficGroupBy();
+        const sourcesPrevious = CoolCat.data.filterSourcesByDates(effectiveSourceRows, range.prevStart, range.prevEnd);
         currentRangeObj = range;
         currentEffectiveSourceRows = effectiveSourceRows;
-        currentGroupBy = groupBy;
-        const trafficCurrent = THD.data.deriveTrafficBreakdown(sourcesCurrent, groupBy);
-        const trafficPrevious = THD.data.deriveTrafficBreakdown(sourcesPrevious, groupBy);
 
-        const currentChannels = THD.charts.renderTrafficChart("trafficChartCurrent", trafficCurrent.channels, trafficCurrent.totalSessions);
-        const previousChannels = THD.charts.renderTrafficChart("trafficChartPrevious", trafficPrevious.channels, trafficPrevious.totalSessions);
+        // Channel views need rows split by GA4 channel (see filterSourcesByDates).
+        const splitCurrent = CoolCat.data.filterSourcesByDates(effectiveSourceRows, range.start, range.end, true);
+        const splitPrevious = CoolCat.data.filterSourcesByDates(effectiveSourceRows, range.prevStart, range.prevEnd, true);
+        sourcesCurrentSplit = splitCurrent;
+        renderFilteredSourceTable();
 
-        lastTrafficComparisonRows = THD.data.buildTrafficComparison(currentChannels, previousChannels);
-        THD.ui.renderTrafficComparison(lastTrafficComparisonRows, activeSourceFilter);
+        // Doughnuts + the tree's top level: channels (≈10 slices, readable).
+        // Doughnuts by platform, matching the table's top-level rows.
+        const channelCurrent = CoolCat.data.deriveTrafficBreakdown(splitCurrent, "platform");
+        const channelPrevious = CoolCat.data.deriveTrafficBreakdown(splitPrevious, "platform");
+        const currentChannels = CoolCat.charts.renderTrafficChart("trafficChartCurrent", channelCurrent.channels, channelCurrent.totalSessions);
+        const previousChannels = CoolCat.charts.renderTrafficChart("trafficChartPrevious", channelPrevious.channels, channelPrevious.totalSessions);
+        const channelColors = {};
+        previousChannels.concat(currentChannels).forEach((c) => { channelColors[c.label] = c.color; });
+
+        lastTrafficTree = CoolCat.data.buildTrafficTree(splitCurrent, splitPrevious);
+        CoolCat.ui.renderTrafficTree(lastTrafficTree, activeSourceFilter, channelColors, CoolCat.data.rangeHasUnsettledDays(range));
         renderChannelTrendOrDoughnuts();
 
-        const channelAnomalies = THD.data.buildChannelAnomalyInsights(effectiveSourceRows, trafficCurrent.channels, groupBy, range);
+        // Briefing, insights and anomalies stay platform-level ("Meta Ads"
+        // is something you can act on; "Paid Social" isn't).
+        const groupBy = "platform";
+        const trafficCurrent = CoolCat.data.deriveTrafficBreakdown(sourcesCurrent, groupBy);
+        const trafficPrevious = CoolCat.data.deriveTrafficBreakdown(sourcesPrevious, groupBy);
+        lastTrafficComparisonRows = CoolCat.data.buildTrafficComparison(trafficCurrent.channels, trafficPrevious.channels);
+
+        const channelAnomalies = CoolCat.data.buildChannelAnomalyInsights(effectiveSourceRows, trafficCurrent.channels, groupBy, range);
+
+        // Year-over-year context for the headline when the main comparison
+        // is the previous period (skipped for partial days and when last
+        // year isn't in the data).
+        let yoyRevenueDelta = null;
+        if (!range.isYoy && !range.partial) {
+            const yoyRange = CoolCat.data.resolveRange(rangeKey, currentCustomRange, "yoy");
+            if (CoolCat.data.hasDataInRange(effectiveDailyRows, yoyRange.prevStart, yoyRange.prevEnd)) {
+                yoyRevenueDelta = CoolCat.data.filterDailyRange(effectiveDailyRows, rangeKey, currentCustomRange, "yoy").kpi.revenue.delta;
+            }
+        }
+        // Full daily history by date, for out-of-sample same-weekday baselines.
+        const dailyHistory = new Map(effectiveDailyRows.map((r) => [r.date, r]));
+        // Don't let demo data stand in for a failed live feed in analytical
+        // claims: channel/landing stories need their own feed to be live.
+        const sourcesLive = dataSourceStatus.sources !== false;
+        const landingLive = dataSourceStatus.landingPages !== false;
+
+        CoolCat.ui.renderBriefing(CoolCat.data.buildBriefing({
+            kpi: filtered.kpi,
+            hasCompareData,
+            labels: filtered.labels,
+            dates: filtered.dates,
+            history: dailyHistory,
+            yoyRevenueDelta,
+            // Site-wide, business-month data: only from the live feed, and
+            // only when the view itself is site-wide (not a single channel).
+            customerTrend: dataSourceStatus.newRepeat !== false && sourceFilterChannel === "all"
+                ? CoolCat.data.newCustomerYoY(fullNewRepeatRows) : null,
+            sourcesComparable: sourcesLive &&
+                CoolCat.data.hasDataInRange(effectiveSourceRows, range.start, range.end) &&
+                CoolCat.data.hasDataInRange(effectiveSourceRows, range.prevStart, range.prevEnd),
+            series: filtered.series,
+            channels: sourcesLive ? trafficCurrent.channels : [],
+            comparisonRows: sourcesLive ? lastTrafficComparisonRows : [],
+            channelAnomalies: sourcesLive ? channelAnomalies : [],
+            risingPage: landingLive ? risingPageInsight : null,
+            pageSpikes: landingLive ? pageSpikes : [],
+            sourceRows: effectiveSourceRows,
+            groupBy,
+            range,
+            feedFailed: dataFeedState.daily === "failed",
+            ...metaAdsForBriefing(range)
+        }), onBriefAction);
 
         const insightSentences = [
-            ...THD.data.buildInsights(filtered.kpi, trafficCurrent.channels, hasCompareData),
-            ...THD.data.buildAnomalyInsights(filtered.labels, filtered.series)
+            ...CoolCat.data.buildInsights(filtered.kpi, sourcesLive ? trafficCurrent.channels : [], hasCompareData && !range.partial),
+            ...CoolCat.data.buildAnomalyInsights(filtered.labels, filtered.series, { dates: filtered.dates, history: dailyHistory })
         ];
 
-        THD.ui.renderInsights(insightSentences, {
+        CoolCat.ui.renderInsights(insightSentences, {
             channelAnomalies,
             onChannelAnomalyClick: onChannelAnomalyInsightClick
         });
 
         // Landing-page anomalies (today/yesterday spikes + the rolling
-        // 7-day riser) get their own Overview section, below Key
+        // 7-day riser) get their own Overview section now, below Key
         // Insights — see renderTopLandingPageInsights in ui.js.
-        THD.ui.renderTopLandingPageInsights({
+        CoolCat.ui.renderTopLandingPageInsights({
             riseInsight: risingPageInsight,
             onRiseClick: onRisingPageInsightClick,
             pageSpikes,
@@ -540,9 +673,17 @@
         // far end keeps a full 12 complete months on screen alongside
         // the partial current one, rather than quietly losing a
         // month's worth of the "whole year" picture every time.
-        const businessMonths = THD.data.buildBusinessMonths(effectiveDailyRows, 13);
-        lastBusinessMonths = businessMonths.length ? businessMonths : DUMMY_MONTHLY;
-        THD.ui.renderMonthlyTable(lastBusinessMonths);
+        const businessMonths = CoolCat.data.buildBusinessMonths(effectiveDailyRows, 13);
+        lastBusinessMonths = businessMonths;
+        CoolCat.ui.renderMonthlyTable(lastBusinessMonths);
+
+        // Ads Performance: same date range as the rest of this
+        // function, but deliberately built from the full (unfiltered
+        // by the "All Sources" dropdown) sourceRows — the whole point
+        // of this tab is comparing platforms against each other, so
+        // narrowing it to one already-selected channel wouldn't make
+        // sense the way it does for the Session Source table above.
+        renderAdsTab(range);
 
         // Goals feature is paused (see the commented-out block in
         // init()) — leave this uncalled for now so the CVR card's
@@ -551,20 +692,53 @@
         // renderGoalsProgressFromState();
     }
 
+    // Real Meta results (order-system orders) for the briefing's range, so a
+    // GA4-based "Meta isn't converting" story can be checked against them.
+    // adsThrough is set when the weekly feed stops short of the range end.
+    function metaAdsForBriefing(range) {
+        const meta = adSpendRows.filter((r) => /meta|facebook|instagram/i.test(r.platform || ""));
+        if (!meta.length) return { adsTotals: null, adsAvailable: false, adsThrough: null };
+        const report = CoolCat.data.buildAdsReport(meta, range, "all");
+        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(report.latestDate || "");
+        const latest = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
+        return {
+            adsTotals: report.totals,
+            adsAvailable: true,
+            adsThrough: latest && latest < range.end ? `${latest.getMonth() + 1}/${latest.getDate()}` : null
+        };
+    }
+
+    // Ads tab (Meta): cost from Meta Ads Manager, results from the order system —
+    // see buildAdsReport in data.js. Follows the main date range and
+    // compare mode; has its own product filter.
+    function renderAdsTab(range) {
+        lastAdsRange = range;
+        CoolCat.ui.populateAdsProducts(CoolCat.data.listAdProducts(adSpendRows), adsProduct);
+        if (!adSpendRows.length) {
+            CoolCat.ui.renderAdsEmpty(CoolCat.data.isAdsFeedConfigured());
+            CoolCat.charts.renderAdsChart(null);
+            return;
+        }
+        const report = CoolCat.data.buildAdsReport(adSpendRows, range, adsProduct);
+        CoolCat.ui.renderAds(report, range);
+        CoolCat.charts.renderAdsChart(report.trend);
+    }
+
     // Goal progress always compares "This Month" actuals against
     // the saved target — a fixed window independent of whatever
     // date range is selected above (same idea as risingPageInsight's
     // own fixed 7-day window), since a monthly target wouldn't mean
     // much measured against, say, "Last 7 Days".
     function renderGoalsProgressFromState() {
-        const monthActuals = THD.data.filterDailyRange(dailyRows, "month", null).kpi;
-        THD.ui.renderGoalProgress(monthActuals, currentGoalTargets);
+        const monthActuals = CoolCat.data.filterDailyRange(dailyRows, "month", null).kpi;
+        CoolCat.ui.renderGoalProgress(monthActuals, currentGoalTargets);
     }
 
     function renderTrendOnly() {
-        const filtered = THD.data.filterDailyRange(dailyRows, currentRange, currentCustomRange);
-        THD.charts.renderTrendChart(filtered.labels, filtered.series, THD.ui.getCheckedMetrics(), {
-            showTrendOverlay: THD.ui.getTrendOverlayState()
+        CoolCat.ui.syncVitalsPlotted();
+        const filtered = lastFiltered || CoolCat.data.filterDailyRange(dailyRows, currentRange, currentCustomRange, compareMode);
+        CoolCat.charts.renderTrendChart(filtered.labels, filtered.series, CoolCat.ui.getCheckedMetrics(), {
+            showTrendOverlay: CoolCat.ui.getTrendOverlayState()
         });
     }
 
@@ -592,8 +766,9 @@
         if (applyBtn) {
             applyBtn.addEventListener("click", () => {
                 if (!startInput.value || !endInput.value) return;
-                const start = new Date(startInput.value);
-                const end = new Date(endInput.value);
+                // (6) local dates — new Date("YYYY-MM-DD") is UTC midnight
+                const start = CoolCat.data.parseLocalDate(startInput.value);
+                const end = CoolCat.data.parseLocalDate(endInput.value);
                 if (start > end) return;
                 renderForRange("custom", { start, end });
             });
@@ -613,21 +788,22 @@
     // memory — no re-fetch needed. I18N.wireLanguageToggle() already
     // re-applies [data-i18n] static text before calling this.
     function onLanguageChange() {
-        THD.ui.refreshActiveHeader();
-        THD.ui.populateSourceFilterOptions(availableChannels);
-        THD.ui.renderDataSourceWarning(dataSourceStatus);
+        CoolCat.ui.refreshActiveHeader();
+        CoolCat.ui.renderDataFreshness();
+        CoolCat.ui.populateSourceFilterOptions(availableChannels);
+        CoolCat.ui.renderDataSourceWarning(dataSourceStatus);
         // Rebuilt (not just re-rendered) since insight.sentence is a
         // pre-formatted i18n string baked in at build time, same
         // reason the New/Repeat insights below get rebuilt too.
-        risingPageInsight = THD.data.buildRisingLandingPageInsight(landingRows);
-        pageSpikes = THD.data.buildTodayYesterdaySpikeInsights(landingRows);
+        risingPageInsight = CoolCat.data.buildRisingLandingPageInsight(landingRows);
+        pageSpikes = CoolCat.data.buildTodayYesterdaySpikeInsights(landingRows);
         renderForRange(currentRange, currentCustomRange);
         renderLandingPagesForDevice();
         renderNewRepeatChartOnly();
-        THD.ui.renderNewRepeatTable(newRepeatRows);
-        THD.ui.renderNewRepeatInsights(THD.data.buildNewRepeatInsights(fullNewRepeatRows));
+        CoolCat.ui.renderNewRepeatTable(newRepeatRows);
+        CoolCat.ui.renderNewRepeatInsights(CoolCat.data.buildNewRepeatInsights(fullNewRepeatRows));
         renderNewRepeatSourceNote();
-        THD.ui.refreshNotesList();
+        CoolCat.ui.refreshNotesList();
 
         // If the "rising" panel (opened from the Overview insight) is
         // currently open, refresh it in place too — the generic
@@ -636,12 +812,18 @@
         // part of its own re-render (by the time it runs, I18N's
         // internal language state has already switched, so its strings
         // come out translated).
-        if (risingPanelActiveInsight && !risingPanelActiveGeneric && risingPageInsight) {
-            risingPanelActiveInsight = risingPageInsight;
-            THD.ui.renderLandingRisingPanel(risingPageInsight);
-            THD.charts.renderLandingPageMiniChart("landingRisingPanelChart", risingPageInsight.dailySessions, risingPageInsight.spikeDate,
-                (date) => showBreakdownForDate(date, risingPageInsight.pageTitle));
-            if (risingPageInsight.spikeDate) showBreakdownForDate(risingPageInsight.spikeDate, risingPageInsight.pageTitle);
+        if (risingPanelActiveInsight && !risingPanelActiveGeneric) {
+            // Re-render the page that was actually open (a spike panel must
+            // not turn into the weekly riser), using its rebuilt insight when
+            // there is one so the sentence is in the new language.
+            const open = risingPanelActiveInsight;
+            const rebuilt = [risingPageInsight].concat(pageSpikes || [])
+                .find((i) => i && i.pageTitle === open.pageTitle && !!i.spikeSummary === !!open.spikeSummary) || open;
+            risingPanelActiveInsight = rebuilt;
+            CoolCat.ui.renderLandingRisingPanel(rebuilt);
+            CoolCat.charts.renderLandingPageMiniChart("landingRisingPanelChart", rebuilt.dailySessions, rebuilt.spikeDate,
+                (date) => showBreakdownForDate(date, rebuilt.pageTitle));
+            if (rebuilt.spikeDate) showBreakdownForDate(rebuilt.spikeDate, rebuilt.pageTitle);
         }
     }
 
@@ -653,61 +835,68 @@
 
         window.I18N.applyStatic();
         window.I18N.wireLanguageToggle(onLanguageChange);
+        document.body.dataset.view = "overview";
 
-        THD.ui.showInitialSkeletons();
-        THD.ui.renderLastUpdate();
-        THD.ui.wireSourceTableToggle();
-        THD.ui.wireRefreshButton(loadAndRenderAll);
-        THD.ui.wireMetricToggles(renderTrendOnly);
-        THD.ui.wireMetricToggles(renderAovChartOnly, "aovMetricToggles");
-        THD.ui.wireTrendOverlayToggle(renderTrendOnly);
-        THD.ui.wireSourceFilterToggle((channel) => {
+        CoolCat.ui.showInitialSkeletons();
+        CoolCat.ui.wireSourceTableToggle();
+        CoolCat.ui.wireRefreshButton(() => refreshData({ silent: false }));
+
+        // A dashboard left open all day goes stale: when the tab comes back
+        // into view after 30+ minutes, quietly check for new data (and only
+        // say something if there is some).
+        document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "visible" && Date.now() - lastLoadAt > AUTO_CHECK_MS) {
+                refreshData({ silent: true });
+            }
+        });
+        CoolCat.ui.wireMetricToggles(renderTrendOnly);
+        CoolCat.ui.wireMetricToggles(renderAovChartOnly, "aovMetricToggles");
+
+        const adsProductSelect = document.getElementById("adsProductSelect");
+        if (adsProductSelect) {
+            adsProductSelect.addEventListener("change", () => {
+                adsProduct = adsProductSelect.value;
+                if (lastAdsRange) renderAdsTab(lastAdsRange);
+            });
+        }
+        CoolCat.ui.wireTrendOverlayToggle(renderTrendOnly);
+        CoolCat.ui.wireSourceFilterToggle((channel) => {
             sourceFilterChannel = channel;
             activeSourceFilter = null;
             renderForRange(currentRange, currentCustomRange);
         });
-        THD.ui.wireTrafficGroupToggle(() => {
+        CoolCat.ui.wireTrafficTree((filter) => {
+            activeSourceFilter = sameFilter(activeSourceFilter, filter) ? null : filter;
+            refreshTrafficSelection();
+        }, () => activeSourceFilter);
+        CoolCat.ui.wireClearSourceFilter(() => {
             activeSourceFilter = null;
-            renderForRange(currentRange, currentCustomRange);
+            refreshTrafficSelection();
         });
-        THD.ui.wireTrafficComparisonFilter((label) => {
-            activeSourceFilter = (activeSourceFilter === label) ? null : label;
-            THD.ui.renderTrafficComparison(lastTrafficComparisonRows, activeSourceFilter);
-            renderFilteredSourceTable();
-            renderChannelTrendOrDoughnuts();
-        });
-        THD.ui.wireClearSourceFilter(() => {
+        CoolCat.ui.wireChannelTrendMetricToggle(renderChannelTrendOrDoughnuts);
+        CoolCat.ui.wireChannelTrendCloseButton(() => {
             activeSourceFilter = null;
-            THD.ui.renderTrafficComparison(lastTrafficComparisonRows, activeSourceFilter);
-            renderFilteredSourceTable();
-            renderChannelTrendOrDoughnuts();
+            refreshTrafficSelection();
         });
-        THD.ui.wireChannelTrendMetricToggle(renderChannelTrendOrDoughnuts);
-        THD.ui.wireChannelTrendCloseButton(() => {
-            activeSourceFilter = null;
-            THD.ui.renderTrafficComparison(lastTrafficComparisonRows, activeSourceFilter);
-            renderFilteredSourceTable();
-            renderChannelTrendOrDoughnuts();
-        });
-        THD.ui.wireLandingDeviceToggle(renderLandingPagesForDevice);
-        THD.ui.wireHideSystemToggle(renderLandingPagesForDevice);
-        THD.ui.wireLandingPagesToggle();
-        THD.ui.wireLandingPageItemClick(onLandingPageItemClick);
-        THD.ui.wireLandingRisingPanelClose(() => {
+        CoolCat.ui.wireLandingDeviceToggle(renderLandingPagesForDevice);
+        CoolCat.ui.wireHideSystemToggle(renderLandingPagesForDevice);
+        CoolCat.ui.wireLandingPagesToggle();
+        CoolCat.ui.wireLandingPageItemClick(onLandingPageItemClick);
+        CoolCat.ui.wireLandingRisingPanelClose(() => {
             risingPanelActiveInsight = null;
             risingPanelActiveGeneric = false;
         });
-        THD.ui.wireSourceBreakdownRowClicks((label) => {
+        CoolCat.ui.wireSourceBreakdownRowClicks((label) => {
             if (!breakdownContext) return;
-            const detail = THD.data.buildDayPageSourceDetail(landingRows, breakdownContext.pageTitle, breakdownContext.date, breakdownContext.groupBy, label);
-            THD.ui.renderSourceBreakdownDetail(label, detail);
+            const detail = CoolCat.data.buildDayPageSourceDetail(landingRowsForDevice(), breakdownContext.pageTitle, breakdownContext.date, breakdownContext.groupBy, label);
+            CoolCat.ui.renderSourceBreakdownDetail(label, detail);
         });
-        THD.ui.wireSidebarNav(THD.charts.resizeCharts);
-        THD.ui.wireThemeToggle(() => {
+        CoolCat.ui.wireSidebarNav(CoolCat.charts.resizeCharts);
+        CoolCat.ui.wireThemeToggle(() => {
             renderForRange(currentRange, currentCustomRange);
             renderNewRepeatChartOnly();
         });
-        THD.ui.wireNotes();
+        CoolCat.ui.wireNotes();
 
         // ---- Monthly Targets (Goals) ----
         // Built for v2, but the target-setting approach itself hasn't
@@ -718,17 +907,17 @@
         // back in index.html, and restoring the Monthly Targets section
         // on the Settings page (see git history / previous zip).
         //
-        // THD.goals.subscribe((targets) => {
+        // CoolCat.goals.subscribe((targets) => {
         //     currentGoalTargets = targets;
-        //     THD.ui.renderGoalsForm(targets);
+        //     CoolCat.ui.renderGoalsForm(targets);
         //     renderGoalsProgressFromState();
         // });
-        // THD.ui.wireGoalsForm((targets) => {
-        //     THD.ui.setGoalsStatus("");
-        //     THD.goals.save(targets).then(() => {
-        //         THD.ui.setGoalsStatus(window.I18N.t("settings.goalsSaved"));
+        // CoolCat.ui.wireGoalsForm((targets) => {
+        //     CoolCat.ui.setGoalsStatus("");
+        //     CoolCat.goals.save(targets).then(() => {
+        //         CoolCat.ui.setGoalsStatus(window.I18N.t("settings.goalsSaved"));
         //     }).catch(() => {
-        //         THD.ui.setGoalsStatus(window.I18N.t("settings.goalsError"), true);
+        //         CoolCat.ui.setGoalsStatus(window.I18N.t("settings.goalsError"), true);
         //     });
         // });
 
@@ -736,36 +925,31 @@
         // Raw numeric values, not the display-formatted strings on
         // screen (no ¥, no thousands separators) — so the exported
         // file is actually useful to re-open and compute on.
-        THD.ui.wireCsvExportButtons({
+        CoolCat.ui.wireCsvExportButtons({
             exportSourceCsvBtn: () => {
-                THD.exportUtil.downloadCsv("thd-session-source.csv", [
+                CoolCat.exportUtil.downloadCsv("coolcat-session-source.csv", [
                     { key: "sourceMedium", header: "Source / Medium" },
                     { key: "sessions", header: "Sessions" },
                     { key: "users", header: "Total Users" },
                     { key: "purchases", header: "Ecommerce Purchases" },
                     { key: "revenue", header: "Total Revenue" },
                     { header: "CVR (%)", value: (r) => r.cvr.toFixed(2) }
-                ], sourcesCurrentForFilter);
+                ], lastSourceTableRows);
             },
             exportTrafficCsvBtn: () => {
-                THD.exportUtil.downloadCsv("thd-traffic-comparison.csv", [
-                    { key: "label", header: "Source" },
-                    { header: "Sessions (Current)", value: (r) => r.current ? r.current.sessions : 0 },
-                    { header: "Sessions (Previous)", value: (r) => r.previous ? r.previous.sessions : 0 },
-                    {
-                        header: "Delta vs Previous (%)",
-                        value: (r) => {
-                            const cur = r.current ? r.current.sessions : 0;
-                            const prev = r.previous ? r.previous.sessions : 0;
-                            return prev ? ((cur - prev) / prev * 100).toFixed(2) : "";
-                        }
-                    },
-                    { header: "Revenue (Current)", value: (r) => r.current ? r.current.revenue : 0 },
-                    { header: "CVR (Current, %)", value: (r) => r.current ? r.current.cvr.toFixed(2) : "" }
-                ], lastTrafficComparisonRows);
+                // Every level of the traffic tree, in display order.
+                CoolCat.exportUtil.downloadCsv("coolcat-traffic-comparison.csv", [
+                    { key: "level", header: "Level" },
+                    { header: "Source", value: (r) => (r.level === "group" ? "Small sources" : r.label) },
+                    { header: "Sessions (Current)", value: (r) => r.cur.sessions },
+                    { header: "Sessions (Previous)", value: (r) => r.prev.sessions },
+                    { header: "Delta vs Previous (%)", value: (r) => (r.prev.sessions ? ((r.cur.sessions - r.prev.sessions) / r.prev.sessions * 100).toFixed(2) : "") },
+                    { header: "Revenue (Current)", value: (r) => r.cur.revenue },
+                    { header: "CVR (Current, %)", value: (r) => (r.cur.sessions ? r.cur.cvr.toFixed(2) : "") }
+                ], CoolCat.data.flattenTrafficTree(lastTrafficTree));
             },
             exportMonthlyCsvBtn: () => {
-                THD.exportUtil.downloadCsv("thd-monthly-performance.csv", [
+                CoolCat.exportUtil.downloadCsv("coolcat-monthly-performance.csv", [
                     { key: "month", header: "Month" },
                     { key: "revenue", header: "Revenue" },
                     { key: "orders", header: "Orders" },
@@ -775,7 +959,7 @@
                 ], lastBusinessMonths);
             },
             exportNewRepeatCsvBtn: () => {
-                THD.exportUtil.downloadCsv("thd-new-repeat.csv", [
+                CoolCat.exportUtil.downloadCsv("coolcat-new-repeat.csv", [
                     { key: "period", header: "Period" },
                     { key: "totalRevenue", header: "Total Revenue" },
                     { key: "totalOrders", header: "Total Orders" },
@@ -798,8 +982,32 @@
         // .dashboardView that isn't .viewHidden, i.e. whichever tab is
         // open) to print natively, checkboxes/selects/canvases and
         // all, so it's a faithful snapshot of what's on screen.
-        THD.ui.wireExportPdfButton(() => {
-            THD.exportUtil.printCurrentView();
+        CoolCat.ui.wireExportPdfButton(() => {
+            CoolCat.exportUtil.printCurrentView();
+        });
+
+        // Dark theme prints as pale text on white paper — switch to the
+        // light palette for the duration of the print (charts bake their
+        // colors in at render time, so they're re-rendered both ways).
+        let printThemeRestore = null;
+        const rerenderCharts = () => {
+            const prev = Chart.defaults.animation;
+            Chart.defaults.animation = false;
+            renderForRange(currentRange, currentCustomRange);
+            renderNewRepeatChartOnly();
+            Chart.defaults.animation = prev;
+        };
+        window.addEventListener("beforeprint", () => {
+            if (document.documentElement.getAttribute("data-theme") !== "dark") return;
+            printThemeRestore = "dark";
+            document.documentElement.setAttribute("data-theme", "light");
+            rerenderCharts();
+        });
+        window.addEventListener("afterprint", () => {
+            if (!printThemeRestore) return;
+            document.documentElement.setAttribute("data-theme", printThemeRestore);
+            printThemeRestore = null;
+            rerenderCharts();
         });
 
         wireDateRange();
@@ -807,39 +1015,129 @@
         await loadAndRenderAll();
     }
 
+    /* ==========================================================
+       Refresh / data freshness
+       The sheet behind the dashboard is refreshed by the GA4 add-on
+       about once an hour, so most manual refreshes legitimately bring
+       back the same data — which used to look like "the button does
+       nothing". Now every load fingerprints the data, the top bar shows
+       how fresh the data really is, and a refresh says what happened.
+    ========================================================== */
+
+    const AUTO_CHECK_MS = 30 * 60 * 1000;
+    let lastLoadAt = 0;
+    let dataFingerprint = null;
+    let refreshing = false;
+    let lastLoadPartialFailure = false; // a feed failed this load and kept its previous data
+
+    function fingerprintData() {
+        const last = dailyRows.length ? dailyRows[dailyRows.length - 1] : null;
+        // Latest date + row counts + the latest day's numbers: catches a new
+        // day AND today's partial figures being topped up.
+        return [
+            last ? last.date : "",
+            dailyRows.length, sourceRows.length, landingRows.length,
+            last ? Math.round(last.sessions) : 0,
+            last ? Math.round(last.revenue) : 0
+        ].join("|");
+    }
+
+    async function refreshData({ silent }) {
+        if (refreshing) return;
+        refreshing = true;
+        try {
+            const before = dataFingerprint;
+            await loadAndRenderAll();
+            const changed = before !== null && before !== dataFingerprint;
+            const date = latestDataDate(dailyRows);
+            const dateText = date ? window.I18N.formatDayLabel(date) : "--";
+            if (lastLoadPartialFailure) {
+                CoolCat.ui.showToast(window.I18N.t("refresh.failed"), "bad");
+            } else if (changed) {
+                CoolCat.ui.showToast(window.I18N.t("refresh.updated", { date: dateText }), "good");
+            } else if (!silent) {
+                CoolCat.ui.showToast(window.I18N.t("refresh.noNew", { date: dateText }), "info");
+            }
+        } catch (e) {
+            if (!silent) CoolCat.ui.showToast(window.I18N.t("refresh.failed"), "bad");
+            console.warn("[CoolCat.app] Refresh failed:", e.message);
+        } finally {
+            refreshing = false;
+        }
+    }
+
     async function loadAndRenderAll() {
 
         // Each source loads independently and falls back to dummy
         // data on its own, so a partial live setup still works.
-        const [liveDaily, liveSources, liveNewRepeat, liveLandingPages] = await Promise.all([
-            THD.data.loadDailyGA4(),
-            THD.data.loadSources(),
-            THD.data.loadNewRepeat(),
-            THD.data.loadLandingPages()
+        const [liveDaily, liveSources, liveNewRepeat, liveLandingPages, liveAdSpend] = await Promise.all([
+            CoolCat.data.loadDailyGA4(),
+            CoolCat.data.loadSources(),
+            CoolCat.data.loadNewRepeat(),
+            CoolCat.data.loadLandingPages(),
+            CoolCat.data.isAdsFeedConfigured() ? CoolCat.data.loadAdSpend() : Promise.resolve(null)
         ]);
 
-        dailyRows = liveDaily && liveDaily.length ? liveDaily : buildDummyDailyRows();
-        sourceRows = liveSources && liveSources.length ? liveSources : buildDummySourcesDaily();
-        landingRows = liveLandingPages && liveLandingPages.length ? liveLandingPages : buildDummyLandingPagesDaily();
-        const newRepeat = liveNewRepeat && liveNewRepeat.length ? liveNewRepeat : buildDummyNewRepeat();
+        // On a REFRESH, a feed that fails keeps its last good data instead
+        // of being swapped for demo numbers (a network blip used to turn a
+        // live dashboard into a fictional one). Demo data is only used when
+        // a feed has never loaded.
+        const prev = dataSourceStatus;
+        const keep = (live, ok, current) => !!(live && live.length) ? null : (ok && current && current.length ? current : null);
+        lastLoadPartialFailure = false;
+        // state: "live" | "failed" (wired feed that didn't load — shown as
+        // unavailable, never as made-up numbers) | "demo" (no feed wired yet).
+        const pick = (key, live, wasLive, current, dummy) => {
+            if (live && live.length) return { rows: live, live: true, state: "live" };
+            const kept = keep(live, wasLive, current);
+            if (kept) { lastLoadPartialFailure = true; return { rows: kept, live: true, state: "live" }; }
+            if (CoolCat.data.isFeedConfigured(key)) { lastLoadPartialFailure = true; return { rows: [], live: false, state: "failed" }; }
+            return { rows: dummy(), live: false, state: "demo" };
+        };
+        const dailyPick = pick("daily", liveDaily, prev.daily && dataFingerprint !== null, dailyRows, DEMO ? DEMO.daily : buildDummyDailyRows);
+        const sourcesPick = pick("sources", liveSources, prev.sources && dataFingerprint !== null, sourceRows, DEMO ? DEMO.sources : buildDummySourcesDaily);
+        const landingPick = pick("landingPages", liveLandingPages, prev.landingPages && dataFingerprint !== null, landingRows, DEMO ? DEMO.landingPages : buildDummyLandingPagesDaily);
+        const newRepeatPick = pick("newRepeat", liveNewRepeat, prev.newRepeat && dataFingerprint !== null, fullNewRepeatRows, DEMO ? DEMO.newRepeat : buildDummyNewRepeat);
+        dataFeedState = { daily: dailyPick.state, sources: sourcesPick.state, landingPages: landingPick.state, newRepeat: newRepeatPick.state };
+
+        dailyRows = dailyPick.rows;
+        CoolCat.data.setLatestDataDate(latestDataDate(dailyRows));
+        sourceRows = sourcesPick.rows;
+        landingRows = landingPick.rows;
+        // Ads: live when configured (a failed refresh keeps the last good rows),
+        // otherwise the demo store.
+        const adsLive = !!(liveAdSpend && liveAdSpend.length);
+        if (adsLive) adSpendRows = liveAdSpend;
+        else if (adSpendRows.length) lastLoadPartialFailure = true;
+        else if (!CoolCat.data.isAdsFeedConfigured() && DEMO) adSpendRows = DEMO.adSpend();
+        const newRepeat = newRepeatPick.rows;
 
         dataSourceStatus = {
-            daily: !!(liveDaily && liveDaily.length),
-            sources: !!(liveSources && liveSources.length),
-            landingPages: !!(liveLandingPages && liveLandingPages.length),
-            newRepeat: !!(liveNewRepeat && liveNewRepeat.length)
+            daily: dailyPick.live,
+            sources: sourcesPick.live,
+            landingPages: landingPick.live,
+            newRepeat: newRepeatPick.live,
+            // only a problem when the feed is set up but didn't load
+            adSpend: !CoolCat.data.isAdsFeedConfigured() || adsLive || adSpendRows.length > 0
         };
-        THD.ui.renderDataSourceWarning(dataSourceStatus);
+        CoolCat.ui.renderDataSourceWarning(dataSourceStatus, dataFeedState);
 
-        availableChannels = THD.data.listAvailableChannels(sourceRows, "channel");
-        THD.ui.populateSourceFilterOptions(availableChannels);
+        // By platform — the same names as the Traffic table's top-level rows.
+        availableChannels = CoolCat.data.listAvailableChannels(sourceRows, "platform");
+        if (sourceFilterChannel !== "all" && !availableChannels.includes(sourceFilterChannel)) {
+            sourceFilterChannel = "all";
+        }
+        CoolCat.ui.populateSourceFilterOptions(availableChannels);
 
         // Fixed 7-day-vs-prior-7-day window (independent of the main
         // date-range picker), so this must be computed before the
         // first renderForRange call — renderForRange is what actually
-        // passes it into THD.ui.renderInsights.
-        risingPageInsight = THD.data.buildRisingLandingPageInsight(landingRows);
-        pageSpikes = THD.data.buildTodayYesterdaySpikeInsights(landingRows);
+        // passes it into CoolCat.ui.renderInsights.
+        risingPageInsight = CoolCat.data.buildRisingLandingPageInsight(landingRows);
+        pageSpikes = CoolCat.data.buildTodayYesterdaySpikeInsights(landingRows);
+
+        // Needed by the briefing's new-customer story, so set before the first render.
+        fullNewRepeatRows = newRepeat;
 
         renderForRange(currentRange, currentCustomRange);
         renderLandingPagesForDevice();
@@ -856,14 +1154,16 @@
         // progress, so this keeps a full 12 complete months on screen
         // alongside it instead of displacing one of them.
         const recentNewRepeat = newRepeat.slice(-13);
-        THD.ui.renderNewRepeatTable(recentNewRepeat);
+        CoolCat.ui.renderNewRepeatTable(recentNewRepeat);
         newRepeatRows = recentNewRepeat;
         fullNewRepeatRows = newRepeat;
         renderNewRepeatChartOnly();
-        THD.ui.renderNewRepeatInsights(THD.data.buildNewRepeatInsights(newRepeat));
+        CoolCat.ui.renderNewRepeatInsights(CoolCat.data.buildNewRepeatInsights(newRepeat));
         renderNewRepeatSourceNote();
 
-        THD.ui.renderLastUpdate();
+        dataFingerprint = fingerprintData();
+        lastLoadAt = Date.now();
+        CoolCat.ui.renderDataFreshness(latestDataDate(dailyRows));
     }
 
     document.addEventListener("DOMContentLoaded", init);

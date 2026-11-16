@@ -1,20 +1,14 @@
 /* ==========================================================
    CoolCat Analytics
    Live Data Layer
-   Version 1.0 (portfolio / demo build)
-
-   This is a public portfolio build: no data source URLs are
-   configured below, so every feed intentionally falls back to
-   generated dummy data (see buildDummy* in app.js) and the
-   dashboard runs entirely on fictional sample numbers — nothing
-   here talks to a real spreadsheet, GA4 property, or backend.
+   Version 1.0
 
    Fetches published Google Sheets CSVs and shapes them into
    the same structures the UI/chart layers expect. Falls back
    to generated dummy data per-source if a URL isn't configured
    yet or the fetch fails, so the dashboard always renders.
 
-   ---- HOW TO GO LIVE (for your own deployment) ----
+   ---- HOW TO GO LIVE ----
    1. Publish each sheet/tab to the web as CSV:
       File > Share > Publish to web > select sheet > CSV
    2. Paste the resulting URLs into CONFIG below.
@@ -22,9 +16,9 @@
       comment above each loader function.
 ========================================================== */
 
-window.THD = window.THD || {};
+window.CoolCat = window.CoolCat || {};
 
-(function (THD) {
+(function (CoolCat) {
 
     const CONFIG = {
         // Daily GA4 rollup: date, users, sessions, purchases, revenue
@@ -61,8 +55,25 @@ window.THD = window.THD || {};
         // Spreadsheet: WEB本店新規／リピータ — published as-is, raw
         // layout (two header rows, no need to restructure the sheet).
         // See loadNewRepeat() for the exact column mapping.
-        NEW_REPEAT_CSV_URL: ""
+        NEW_REPEAT_CSV_URL: "",
+
+        // Ads Performance (Meta) — an ads sheet (tab feed_ads, one row per
+        // day × campaign), published to the web as CSV. One row per
+        // day × campaign. Columns: date (yyyy-mm-dd), campaign, platform,
+        // product, spend, impressions, clicks, metaPurchases, orders,
+        // newOrders, repeatOrders, revenue, newRevenue, repeatRevenue,
+        // newBoughtAgain. Aggregates only — no order IDs. Left blank, the
+        // Ads tab runs on the demo store (js/demo-data.js).
+        AD_SPEND_CSV_URL: ""
     };
+
+    // Google's published-CSV endpoint is cached, so a plain re-fetch on
+    // "Refresh" can hand back the same file — a throwaway query param
+    // forces a fresh copy.
+    function bustCache(url) {
+        if (!url) return url;
+        return url + (url.includes("?") ? "&" : "?") + "_t=" + Date.now();
+    }
 
     /* ==========================================================
        CSV fetch helper
@@ -74,12 +85,18 @@ window.THD = window.THD || {};
                 reject(new Error("No URL configured"));
                 return;
             }
-            Papa.parse(url, {
+            Papa.parse(bustCache(url), {
                 download: true,
                 header: true,
                 dynamicTyping: true,
                 skipEmptyLines: true,
-                complete: (results) => resolve(results.data),
+                complete: (results) => {
+                    if ((!results.data || !results.data.length) && results.errors && results.errors.length) {
+                        reject(new Error(results.errors[0].message || "CSV parse error"));
+                    } else {
+                        resolve(results.data);
+                    }
+                },
                 error: (err) => reject(err)
             });
         });
@@ -96,7 +113,7 @@ window.THD = window.THD || {};
                 reject(new Error("No URL configured"));
                 return;
             }
-            Papa.parse(url, {
+            Papa.parse(bustCache(url), {
                 download: true,
                 header: false,
                 dynamicTyping: true,
@@ -141,7 +158,7 @@ window.THD = window.THD || {};
                 }))
                 .sort((a, b) => new Date(a.date) - new Date(b.date));
         } catch (e) {
-            console.warn("[THD.data] GA4 daily CSV not available, using dummy data:", e.message);
+            console.warn("[CoolCat.data] GA4 daily CSV not available, using dummy data:", e.message);
             return null;
         }
     }
@@ -158,10 +175,21 @@ window.THD = window.THD || {};
                     users: Number(r.users) || 0,
                     purchases: Number(r.purchases) || 0,
                     revenue: Number(r.revenue) || 0,
-                    channel: r.channel || null
+                    // GA4's own channel group, if the report adds the
+                    // sessionDefaultChannelGroup dimension (see the report
+                    // config sheet) — far better than guessing from text.
+                    channel: r.channel || r.sessionDefaultChannelGroup || null,
+                    // Optional — only present once a "campaign" column is
+                    // added to the published sheet (see Ads Performance).
+                    // Used to line up
+                    // GA4 sessions/revenue with ad spend at the individual
+                    // campaign level; everything else about this feed
+                    // (Traffic tab, Session Source table, etc.) works
+                    // identically whether or not it's present.
+                    campaign: r.campaign || null
                 }));
         } catch (e) {
-            console.warn("[THD.data] GA4 sources CSV not available, using dummy data:", e.message);
+            console.warn("[CoolCat.data] GA4 sources CSV not available, using dummy data:", e.message);
             return null;
         }
     }
@@ -210,6 +238,8 @@ window.THD = window.THD || {};
                 .filter((r) => Number.isFinite(r[0]) && Number.isFinite(r[1])) // drops blank/leftover formula rows at the bottom
                 .sort((a, b) => (a[0] * 12 + a[1]) - (b[0] * 12 + b[1]))
                 .map((r) => ({
+                    year: r[0],
+                    month: r[1],
                     period: businessMonthLabel(r[0], r[1] - 1),
                     totalRevenue: parseFormattedNumber(r[2]),
                     totalOrders: parseFormattedNumber(r[5]),
@@ -222,7 +252,7 @@ window.THD = window.THD || {};
                     visitorsTotal: parseFormattedNumber(r[22])
                 }));
         } catch (e) {
-            console.warn("[THD.data] New/Repeat CSV not available, using dummy data:", e.message);
+            console.warn("[CoolCat.data] New/Repeat CSV not available, using dummy data:", e.message);
             return null;
         }
     }
@@ -323,9 +353,57 @@ window.THD = window.THD || {};
                     };
                 });
         } catch (e) {
-            console.warn("[THD.data] Landing pages CSV not available, using dummy data:", e.message);
+            console.warn("[CoolCat.data] Landing pages CSV not available, using dummy data:", e.message);
             return null;
         }
+    }
+
+    /* ==========================================================
+       Ads Performance feed (see CONFIG.AD_SPEND_CSV_URL)
+    ========================================================== */
+
+    async function loadAdSpend() {
+        try {
+            const rows = await fetchCsv(CONFIG.AD_SPEND_CSV_URL);
+            const num = (v) => Number(String(v === undefined || v === null ? "" : v).replace(/[¥,\s]/g, "")) || 0;
+            return rows
+                .filter((r) => r.date && /^\d{4}-\d{2}-\d{2}$|^\d{8}$/.test(String(r.date).trim()))
+                .map((r) => ({
+                    date: parseGA4Date(String(r.date).trim()),
+                    platform: String(r.platform || "Meta").trim(),
+                    campaign: String(r.campaign || "(unnamed)").trim(),
+                    product: String(r.product || r.campaign || "").trim(),
+                    spend: num(r.spend),
+                    impressions: num(r.impressions),
+                    clicks: num(r.clicks),
+                    metaPurchases: num(r.metaPurchases),
+                    orders: num(r.orders),
+                    newOrders: num(r.newOrders),
+                    repeatOrders: num(r.repeatOrders),
+                    revenue: num(r.revenue),
+                    newRevenue: num(r.newRevenue),
+                    repeatRevenue: num(r.repeatRevenue),
+                    newBoughtAgain: num(r.newBoughtAgain)
+                }));
+        } catch (e) {
+            console.warn("[CoolCat.data] Ads feed not available:", e.message);
+            return null;
+        }
+    }
+
+    // Lets a local copy of the feed stand in for testing (?adsFeed=<url>)
+    // without editing CONFIG. Same-origin or https URLs only.
+    (function applyAdsFeedOverride() {
+        try {
+            const u = new URLSearchParams(location.search).get("adsFeed");
+            if (!u) return;
+            const resolved = new URL(u, location.href);
+            if (resolved.origin === location.origin || resolved.protocol === "https:") CONFIG.AD_SPEND_CSV_URL = resolved.href;
+        } catch (e) { /* ignore a malformed override */ }
+    })();
+
+    function isAdsFeedConfigured() {
+        return !!CONFIG.AD_SPEND_CSV_URL;
     }
 
     /* ==========================================================
@@ -335,26 +413,153 @@ window.THD = window.THD || {};
        for sheets that don't include an explicit channel column.
     ========================================================== */
 
+    /* ==========================================================
+       Special buckets — checked BEFORE the normal channel/platform
+       rules, in both groupings.
+       • Internal / Payment: the company's own sites, and payment /
+         carrier-billing pages. When the return from a payment page
+         lands in a new session (the customer took >30 min, switched
+         browser/app for carrier billing, or the tracking cookie didn't
+         carry across domains), GA4 credits that session to the payment
+         page — which steals the sale from the real source and made
+         "Referral (Other)" look like an 18%-CVR channel. (GA4 does NOT
+         start a new session just because the referrer changes.) These
+         aren't acquisition channels at all, so they get their own
+         bucket and are kept out of the channel-efficiency stories.
+         (The real fix is GA4's "unwanted referrals" list + cross-
+         domain measurement — this just stops the dashboard repeating
+         the distortion.)
+       • AI Assistants: ChatGPT/Gemini/Perplexity etc. arrive as
+         referral, organic or (not set) depending on the app — one
+         bucket so the trend is visible.
+       • Webmail: mail.nifty.com etc. are email clicks, not referrals.
+       Edit these lists when a new domain shows up in 参照（その他）.
+
+       Own sites and payment pages are separate buckets:
+       • Own Sites: visits arriving from the company's other sites
+         (coolcat-magazine.example, coolcat-club.example). Those sites report to a
+         different GA4 property, so for the shop this is a real arrival
+         from another site — a normal row, with a CVR. What brought the
+         visitor to the other site is not recorded (that would need
+         cross-domain measurement, which the user has ruled out).
+       • Internal / Payment (shown as "Payment pages"): returns from a
+         payment page — mid-checkout, so not a channel and no CVR.
+    ========================================================== */
+
+    const OWN_HOSTS = [
+        /(^|\.)coolcat-magazine\.example$/,
+        /(^|\.)coolcat-club\.example$/,
+        /studioiframesandbox\.com$/,
+        /(^|\.)makeshop\.jp$/           // MakeShop-hosted cart/checkout pages
+    ];
+    const PAYMENT_HOSTS = [
+        /(^|\.)mul-pay\.jp$/,          // GMO Payment Gateway
+        /(^|\.)gmo-pg\.com$/,
+        // docomo carrier billing / d払い only — NOT all of docomo.ne.jp:
+        // mail.smt.docomo.ne.jp is docomo webmail (→ Email).
+        /^service\.smt\.docomo\.ne\.jp$/,
+        // (auone.jp deliberately absent: search.portal.auone.jp is au's
+        // search engine — real visitors, not a payment page.)
+        /(^|\.)paypay\.ne\.jp$/,
+        /(^|\.)paypal\.com$/,
+        /(^|\.)stripe\.com$/,
+        /(^|\.)sbpayment\.jp$/,
+        /(^|\.)veritrans\.co\.jp$/,
+        /(^|\.)paygent\.co\.jp$/,
+        /^payments\.amazon\.co\.jp$/,   // Amazon Pay (per MakeShop's own exclusion list)
+        /^pay-v2\.amazon\.co\.jp$/,
+        /(^|\.)pay\.rakuten\.co\.jp$/
+    ];
+    const AI_SOURCE = /^(chatgpt\.com|chat\.openai\.com|openai|chatgpt|perplexity|perplexity\.ai|gemini|gemini\.google\.com|bard\.google\.com|claude\.ai|copilot\.microsoft\.com|copilot)$/;
+    // Any webmail host (mail.ocn.jp, mail.commufa.jp, wm.zaq.ne.jp, outlook.live.com, …).
+    const WEBMAIL_SOURCE = /^((web)?mail\d*|wm|webmail)\.[a-z0-9.-]+$|^outlook\.(live|office|office365)\.com$/;
+
+    function specialBucket(source) {
+        // Webmail first: carrier webmail hosts (mail.smt.docomo.ne.jp)
+        // share a domain with carrier payment pages.
+        if (WEBMAIL_SOURCE.test(source)) return "Email";
+        // MakeRepeater sends the shop's campaign / abandoned-cart emails —
+        // an untagged click from it is an email click, not an internal hop.
+        if (/(^|\.)makerepeater\.jp$/.test(source)) return "Email";
+        if (PAYMENT_HOSTS.some((re) => re.test(source))) return "Internal / Payment";
+        if (OWN_HOSTS.some((re) => re.test(source))) return "Own Sites";
+        if (AI_SOURCE.test(source)) return "AI Assistants";
+        return null;
+    }
+
+    // Social networks by their short and long source names — "ig"/"fb"
+    // are what Meta's own UTM templates send.
+    const SOCIAL_SOURCE = /^(ig|fb|instagram|facebook|meta|l\.facebook\.com|m\.facebook\.com|lm\.facebook\.com|instagram\.com|facebook\.com|line|line\.me|twitter|x|t\.co|x\.com|twitter\.com|tiktok|tiktok\.com|pinterest|pinterest\.com|youtube|youtube\.com|m\.youtube\.com)$/;
+
+    // GA4 default channel group names -> this dashboard's keys.
+    const GA4_CHANNEL_MAP = {
+        "unassigned": "(not set)",
+        "(not set)": "(not set)",
+        "organic social": "Social",
+        "organic video": "Video",
+        "paid video": "Video",
+        "organic shopping": "Shopping",
+        "paid shopping": "Shopping",
+        "cross-network": "Cross-network",
+        "ai assistant": "AI Assistants",
+        "ai assistants": "AI Assistants",
+        "paid other": "Paid (Other)",
+        "mobile push notifications": "Other",
+        "sms": "Other",
+        "audio": "Other"
+    };
+
+    function normalizeGa4Channel(ch) {
+        if (!ch) return null;
+        const key = String(ch).trim();
+        return GA4_CHANNEL_MAP[key.toLowerCase()] || key;
+    }
+
     function classifySourceChannel(sourceMedium) {
         if (!sourceMedium) return "Other";
         const parts = String(sourceMedium).split("/").map((s) => s.trim().toLowerCase());
         const source = parts[0] || "";
         const medium = parts[1] || "";
 
+        const special = specialBucket(source);
+        if (special) return special;
+
         // Broken/missing attribution (bad UTMs, cross-domain linking
         // gaps, ad blockers stripping referrers, etc.) — kept as its
         // own bucket rather than folded into "Other" so it's visible
         // instead of quietly inflating a generic catch-all.
-        if (source === "(not set)" || medium === "(not set)") return "(not set)";
+        if (isUnattributed(source, medium)) return "(not set)";
 
         if (source === "(direct)" && (medium === "(none)" || medium === "")) return "Direct";
+        // A social network with a paid medium is paid social, not paid
+        // search ("ig / paid", "fb / paid" used to land in Paid Search);
+        // a social network linking in normally is social, not referral.
+        if (SOCIAL_SOURCE.test(source)) {
+            if (/cpc|ppc|paid|cpm|ads?$/.test(medium)) return "Paid Social";
+            if (medium === "display" || medium === "banner") return "Display";
+            return "Social";
+        }
         if (medium === "organic") return "Organic Search";
-        if (medium === "cpc" || medium === "ppc" || medium === "paid" || medium === "paidsearch") return "Paid Search";
-        if (medium === "email") return "Email";
+        // Paid social has to be checked before plain "paid"/"social" —
+        // Meta's own auto-tagging sends "paid_social", which used to
+        // fall all the way through to "Other".
+        if (/^(paid[_\- ]?social|social[_\- ]?paid|paidsocial|social[_\- ]?ads?)$/.test(medium)) return "Paid Social";
+        if (medium === "cpc" || medium === "ppc" || medium === "paid" || medium === "paidsearch" || medium === "paid_search") return "Paid Search";
+        if (medium === "email" || medium === "e-mail" || medium === "newsletter" || medium === "mail") return "Email";
+        if (medium === "affiliate" || medium === "affiliates") return "Affiliates";
         if (medium === "referral") return "Referral";
-        if (medium === "display" || medium === "cpm" || medium === "banner") return "Display";
-        if (medium === "social") return "Social";
+        if (medium === "display" || medium === "cpm" || medium === "banner" || medium === "interstitial") return "Display";
+        if (medium === "social" || medium === "social-network" || medium === "social-media" || medium === "sm") return "Social";
         return "Other";
+    }
+
+    // GA4 reports missing attribution two ways: "(not set)" (broken
+    // UTMs, cross-domain gaps) and "(data not available)" (consent mode
+    // / thresholding). Both mean "we don't know where this came from",
+    // so they share one bucket instead of the second hiding in "Other".
+    function isUnattributed(source, medium) {
+        const blank = (v) => v === "(not set)" || v === "(data not available)";
+        return blank(source) || blank(medium);
     }
 
     /* ==========================================================
@@ -370,9 +575,11 @@ window.THD = window.THD || {};
     ========================================================== */
 
     const PLATFORM_MATCHERS = [
+        { test: /youtube|youtu\.be/, label: "YouTube" },
         { test: /google|doubleclick|admanager/, label: "Google" },
-        { test: /facebook|instagram|meta/, label: "Meta" },
-        { test: /yahoo/, label: "Yahoo" },
+        // anchored: a bare /meta/ also caught unrelated domains like metamoji.com
+        { test: /(^|\.)(facebook|instagram)\.com$|^(facebook|instagram|meta|ig|fb)$|^(l|m|lm)\.facebook\.com$/, label: "Meta" },
+        { test: /yahoo|^ydn$|overture/, label: "Yahoo" },
         { test: /criteo/, label: "Criteo" },
         { test: /^line$|\bline\b/, label: "LINE" },
         { test: /bing|microsoft/, label: "Bing" },
@@ -394,7 +601,10 @@ window.THD = window.THD || {};
         const source = parts[0] || "";
         const medium = parts[1] || "";
 
-        if (source === "(not set)" || medium === "(not set)") return "(not set)";
+        const special = specialBucket(source);
+        if (special) return special;
+
+        if (isUnattributed(source, medium)) return "(not set)";
 
         if (source === "(direct)" && (medium === "(none)" || medium === "")) return "Direct";
 
@@ -402,7 +612,11 @@ window.THD = window.THD || {};
         if (match) {
             if (SPLIT_PAID_ORGANIC.includes(match.label)) {
                 const isPaid = /cpc|ppc|paid|cpm|display|banner/.test(medium);
-                return `${match.label} ${isPaid ? "Ads" : "Organic"}`;
+                if (isPaid) return `${match.label} Ads`;
+                // e.g. news.yahoo.co.jp / referral is a link from a Yahoo
+                // site, not Yahoo search — don't call it "Organic".
+                if (medium === "referral") return `${match.label} Referral`;
+                return `${match.label} Organic`;
             }
             return match.label;
         }
@@ -419,19 +633,62 @@ window.THD = window.THD || {};
     // Source table can be filtered down to exactly the rows behind
     // one doughnut/comparison-table bucket (e.g. drilling into
     // "Referral (Other)" to see which sites make it up).
+    // Memoized on the row: the per-channel trend/anomaly code re-classifies
+    // every source row once per channel on every render (≈4s for "This
+    // Year"), and a row's sourceMedium never changes after load.
+    // {groupBy, label, channel?} filter from the traffic tree / briefing.
+    // f.platform / f.channel scope a row picked inside a parent (e.g. "P-MAX
+    // under Google Ads" = Cross-network sessions that are ALSO Google Ads).
+    function matchesTrafficFilter(row, f) {
+        if (!f) return true;
+        if (classifyForGroupBy(row, f.groupBy) !== f.label) return false;
+        if (f.platform && classifyForGroupBy(row, "platform") !== f.platform) return false;
+        return !f.channel || classifyForGroupBy(row, "channel") === f.channel;
+    }
+
     function classifyForGroupBy(row, groupBy) {
-        return groupBy === "platform"
-            ? classifyPlatform(row.sourceMedium)
-            : (row.channel || classifySourceChannel(row.sourceMedium));
+        if (groupBy === "source") return row.sourceMedium;
+        if (groupBy === "platform") {
+            if (row._platform === undefined) row._platform = classifyPlatform(row.sourceMedium);
+            return row._platform;
+        }
+        if (row._channel === undefined) {
+            const source = String(row.sourceMedium || "").split("/")[0].trim().toLowerCase();
+            // Our special buckets win even over GA4's grouping (GA4 calls
+            // the payment gateway "Referral"); otherwise prefer GA4's own
+            // channel when the export has it, else classify from text.
+            row._channel = specialBucket(source) || normalizeGa4Channel(row.channel) || classifySourceChannel(row.sourceMedium);
+        }
+        return row._channel;
     }
 
     // Distinct channel values actually present in the data, used to
     // populate the "All Sources" filter dropdown with real options
     // instead of a hardcoded list that might not match what's there.
     function listAvailableChannels(sourceRows, groupBy = "channel") {
-        const set = new Set();
-        (sourceRows || []).forEach((r) => set.add(classifyForGroupBy(r, groupBy)));
-        return Array.from(set).sort();
+        const sessions = new Map();
+        (sourceRows || []).forEach((r) => {
+            const k = classifyForGroupBy(r, groupBy);
+            sessions.set(k, (sessions.get(k) || 0) + (r.sessions || 0));
+        });
+        // biggest first, so the options people actually pick are at the top
+        return Array.from(sessions.keys()).sort((a, b) => sessions.get(b) - sessions.get(a) || a.localeCompare(b));
+    }
+
+    // A feed with a URL is "wired": if it doesn't load, the dashboard says
+    // so. Demo data is only for a feature that has no feed yet.
+    function isFeedConfigured(key) {
+        return !!({
+            daily: CONFIG.GA4_DAILY_CSV_URL,
+            sources: CONFIG.GA4_SOURCES_CSV_URL,
+            landingPages: CONFIG.GA4_LANDING_PAGES_CSV_URL,
+            newRepeat: CONFIG.NEW_REPEAT_CSV_URL
+        })[key];
+    }
+
+    // True when the range reaches into the days GA4 is still attributing.
+    function rangeHasUnsettledDays(range) {
+        return !!(range && range.end && range.end > settledCutoff());
     }
 
     // Collapses per-day-per-source rows (already filtered down to one
@@ -441,7 +698,7 @@ window.THD = window.THD || {};
     // they already work, just fed a source-scoped daily series instead
     // of the full-property one.
     function buildDailyRowsFromSources(sourceRows) {
-        const byDate = {};
+        const byDate = Object.create(null);
         (sourceRows || []).forEach((r) => {
             if (!byDate[r.date]) byDate[r.date] = { date: r.date, users: 0, sessions: 0, purchases: 0, revenue: 0 };
             const d = byDate[r.date];
@@ -454,7 +711,7 @@ window.THD = window.THD || {};
     }
 
     function deriveTrafficBreakdown(sourceRows, groupBy) {
-        const totals = {};
+        const totals = Object.create(null);
         let totalSessions = 0;
 
         sourceRows.forEach((r) => {
@@ -506,21 +763,45 @@ window.THD = window.THD || {};
         return copy;
     }
 
+    // Local midnight Date -> "YYYY-MM-DD" (the inverse of parseLocalDate).
+    function toLocalDateKey(d) {
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    }
+
+    // "YYYY-MM-DD" -> local midnight. new Date("2026-10-01") parses as
+    // UTC midnight, which lands on the PREVIOUS local day for anyone
+    // viewing from a timezone behind UTC — this keeps every row on the
+    // calendar date it was exported for, wherever the viewer is.
+    function parseLocalDate(dateStr) {
+        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dateStr));
+        if (!m) return startOfDay(new Date(dateStr));
+        return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    }
+
     function daysAgo(n, from) {
         const d = startOfDay(from || new Date());
         d.setDate(d.getDate() - n);
         return d;
     }
 
+    // Multi-day ranges end YESTERDAY, not today: today's row is still
+    // filling up (GA4 shows a partial day), so including it compared a
+    // part-day against a window of full days and dragged every delta
+    // and daily average down. "Today" is the one range that still
+    // shows today — flagged partial so the UI can say so.
     const RANGE_DEFS = {
-        "today": () => ({ start: startOfDay(new Date()), end: startOfDay(new Date()) }),
+        "today": () => ({ start: startOfDay(new Date()), end: startOfDay(new Date()), partial: true }),
         "yesterday": () => ({ start: daysAgo(1), end: daysAgo(1) }),
-        "7d": () => ({ start: daysAgo(6), end: startOfDay(new Date()) }),
-        "14d": () => ({ start: daysAgo(13), end: startOfDay(new Date()) }),
-        "30d": () => ({ start: daysAgo(29), end: startOfDay(new Date()) }),
+        "7d": () => ({ start: daysAgo(7), end: daysAgo(1) }),
+        "14d": () => ({ start: daysAgo(14), end: daysAgo(1) }),
+        "30d": () => ({ start: daysAgo(30), end: daysAgo(1) }),
         "month": () => {
             const now = new Date();
-            return { start: new Date(now.getFullYear(), now.getMonth(), 1), end: startOfDay(now) };
+            const start = new Date(now.getFullYear(), now.getMonth(), 1);
+            // On the 1st there are no complete days yet this month —
+            // fall back to today-so-far rather than an empty range.
+            if (now.getDate() === 1) return { start, end: startOfDay(now), partial: true };
+            return { start, end: daysAgo(1) };
         },
         "lastMonth": () => {
             const now = new Date();
@@ -528,11 +809,13 @@ window.THD = window.THD || {};
             const end = new Date(now.getFullYear(), now.getMonth(), 0); // day 0 = last day of previous month
             return { start, end: startOfDay(end) };
         },
-        "3m": () => ({ start: daysAgo(89), end: startOfDay(new Date()) }),
-        "6m": () => ({ start: daysAgo(179), end: startOfDay(new Date()) }),
+        "3m": () => ({ start: daysAgo(90), end: daysAgo(1) }),
+        "6m": () => ({ start: daysAgo(180), end: daysAgo(1) }),
         "year": () => {
             const now = new Date();
-            return { start: new Date(now.getFullYear(), 0, 1), end: startOfDay(now) };
+            const start = new Date(now.getFullYear(), 0, 1);
+            if (now.getMonth() === 0 && now.getDate() === 1) return { start, end: startOfDay(now), partial: true };
+            return { start, end: daysAgo(1) };
         },
         "lastYear": () => {
             const y = new Date().getFullYear() - 1;
@@ -551,14 +834,29 @@ window.THD = window.THD || {};
     // one year back, regardless of which range is selected — e.g. a
     // custom Jun 1–Sep 2 2026 range compares to Jun 1–Sep 2 2025, not
     // to the 94 days immediately before it.
+    // Set by app.js once the daily feed loads (see setLatestDataDate).
+    let latestDataDate = null;
+
+    function setLatestDataDate(d) {
+        latestDataDate = d ? startOfDay(d) : null;
+    }
+
     function resolveRange(rangeKey, customRange, compareMode = "previous") {
-        let start, end;
+        let start, end, partial = false;
         if (rangeKey === "custom" && customRange && customRange.start && customRange.end) {
             start = startOfDay(customRange.start);
             end = startOfDay(customRange.end);
+            partial = end >= startOfDay(new Date());
         } else {
             const def = RANGE_DEFS[rangeKey] || RANGE_DEFS["month"];
-            ({ start, end } = def());
+            ({ start, end, partial = false } = def());
+        }
+
+        // (2) GA4 exports can lag: if yesterday hasn't landed yet, a
+        // "last 7 days" ending yesterday would really hold 6 days and
+        // be compared with 7. Clamp to the last date in the data.
+        if (!partial && latestDataDate && end > latestDataDate && latestDataDate >= start) {
+            end = new Date(latestDataDate);
         }
 
         const spanDays = Math.round((end - start) / 86400000) + 1;
@@ -573,11 +871,14 @@ window.THD = window.THD || {};
             prevStart = daysAgo(spanDays - 1, prevEnd);
         }
 
-        return { start, end, spanDays, prevStart, prevEnd, compareMode };
+        // isYoy: the comparison window really is "same dates last year" —
+        // either chosen explicitly, or implied by a year-level range.
+        const isYoy = compareMode === "yoy" || YEAR_ALIGNED_RANGES.has(rangeKey);
+        return { start, end, spanDays, prevStart, prevEnd, compareMode, partial, isYoy };
     }
 
     function inRange(dateStr, start, end) {
-        const d = startOfDay(new Date(dateStr));
+        const d = parseLocalDate(dateStr);
         return d >= start && d <= end;
     }
 
@@ -587,8 +888,17 @@ window.THD = window.THD || {};
     // same-period-last-year comparison reaching further back than
     // the data actually goes), so the latter can show a warning
     // instead of a silently misleading "0.0% change".
+    // "Has data" means EVERY day of the window is present, not "at least
+    // one row": a 31-day comparison with only Jan 31 used to pass, and
+    // even 28 of 31 days inflates an otherwise flat total by ~10%.
+    const MIN_COMPARE_COVERAGE = 1;
+
     function hasDataInRange(dailyRows, start, end) {
-        return (dailyRows || []).some((r) => inRange(r.date, start, end));
+        const days = Math.round((end - start) / 86400000) + 1;
+        if (days <= 0) return false;
+        const seen = new Set();
+        (dailyRows || []).forEach((r) => { if (inRange(r.date, start, end)) seen.add(r.date); });
+        return seen.size >= Math.ceil(days * MIN_COMPARE_COVERAGE);
     }
 
     /* ==========================================================
@@ -603,7 +913,6 @@ window.THD = window.THD || {};
         const previous = dailyRows.filter((r) => inRange(r.date, prevStart, prevEnd));
 
         const sum = (rows, key) => rows.reduce((acc, r) => acc + r[key], 0);
-        const pctDelta = (curr, prev) => (prev ? ((curr - prev) / prev) * 100 : 0);
 
         const curUsers = sum(current, "users");
         const curSessions = sum(current, "sessions");
@@ -617,25 +926,47 @@ window.THD = window.THD || {};
 
         const curCvr = curSessions ? (curPurchases / curSessions) * 100 : 0;
         const prevCvr = prevSessions ? (prevPurchases / prevSessions) * 100 : 0;
+        const curAov = curPurchases ? curRevenue / curPurchases : 0;
+        const prevAov = prevPurchases ? prevRevenue / prevPurchases : 0;
         const dayCount = current.length || 1;
 
         return {
             labels: current.map((r) => window.I18N.formatDayLabel(r.date)),
+            dates: current.map((r) => r.date),
             series: {
                 users: current.map((r) => r.users),
                 sessions: current.map((r) => r.sessions),
                 purchases: current.map((r) => r.purchases),
                 revenue: current.map((r) => r.revenue),
-                cvr: current.map((r) => (r.sessions ? (r.purchases / r.sessions) * 100 : 0))
+                cvr: current.map((r) => (r.sessions ? (r.purchases / r.sessions) * 100 : 0)),
+                // GA4 order value per day — so the briefing's "order value"
+                // card plots on its own chart (the Sales tab's order value is
+                // a different source: the shop's monthly sheet).
+                aov: current.map((r) => (r.purchases ? r.revenue / r.purchases : 0))
             },
             kpi: {
-                users: { value: curUsers, delta: pctDelta(curUsers, prevUsers), daily: curUsers / dayCount },
-                sessions: { value: curSessions, delta: pctDelta(curSessions, prevSessions), daily: curSessions / dayCount },
-                purchases: { value: curPurchases, delta: pctDelta(curPurchases, prevPurchases), daily: curPurchases / dayCount },
-                revenue: { value: curRevenue, delta: pctDelta(curRevenue, prevRevenue), daily: curRevenue / dayCount },
-                cvr: { value: curCvr, delta: pctDelta(curCvr, prevCvr), daily: 6.50 }
+                users: { value: curUsers, delta: pctDelta(curUsers, prevUsers), daily: curUsers / dayCount, previous: prevUsers },
+                sessions: { value: curSessions, delta: pctDelta(curSessions, prevSessions), daily: curSessions / dayCount, previous: prevSessions },
+                purchases: { value: curPurchases, delta: pctDelta(curPurchases, prevPurchases), daily: curPurchases / dayCount, previous: prevPurchases },
+                revenue: { value: curRevenue, delta: pctDelta(curRevenue, prevRevenue), daily: curRevenue / dayCount, previous: prevRevenue },
+                aov: { value: curAov, delta: pctDelta(curAov, prevAov), previous: prevAov },
+                // CVR change is reported in percentage POINTS (deltaPts),
+                // which is how it's usually read — "6.07% -> 6.79%" is
+                // +0.72pt, not "+11.9%". delta (relative) is kept for
+                // the trend arrow's direction and the insight ranking.
+                cvr: {
+                    value: curCvr,
+                    delta: pctDelta(curCvr, prevCvr),
+                    deltaPts: prevSessions ? curCvr - prevCvr : null
+                }
             }
         };
+    }
+
+    // null (not 0) when there's nothing to compare against, so the UI
+    // can say "new" instead of a misleading "0.0%".
+    function pctDelta(curr, prev) {
+        return prev ? ((curr - prev) / prev) * 100 : null;
     }
 
     /* ==========================================================
@@ -664,7 +995,7 @@ window.THD = window.THD || {};
     function buildInsights(kpi, channels, hasCompareData = true) {
         const insights = [];
 
-        if (hasCompareData && kpi && kpi.revenue) {
+        if (hasCompareData && kpi && kpi.revenue && kpi.revenue.delta !== null) {
             const d = kpi.revenue.delta;
             const figure = highlight(`${Math.abs(d).toFixed(1)}%`, d >= 0 ? "pos" : "neg");
             const direction = window.I18N.t(d >= 0 ? "insight.increased" : "insight.decreased");
@@ -673,9 +1004,11 @@ window.THD = window.THD || {};
 
         if (channels && channels.length) {
             const totalRevenue = channels.reduce((sum, c) => sum + c.revenue, 0);
-            const topByRevenue = channels.reduce((a, b) => (b.revenue > a.revenue ? b : a), channels[0]);
+            const realChannels = channels.filter((c) => !NOT_A_CHANNEL.has(c.label));
+            const pool = realChannels.length ? realChannels : channels;
+            const topByRevenue = pool.reduce((a, b) => (b.revenue > a.revenue ? b : a), pool[0]);
             const share = totalRevenue ? Math.round((topByRevenue.revenue / totalRevenue) * 100) : 0;
-            const label = `<strong>${window.I18N.channelLabel(topByRevenue.label)}</strong>`;
+            const label = `<strong>${escapeHtml(window.I18N.channelLabel(topByRevenue.label))}</strong>`;
             insights.push(window.I18N.t("insight.topChannelRevenue", { label, figure: highlight(share + "%", "neutral") }));
 
             const notSet = channels.find((c) => c.label === "(not set)");
@@ -684,7 +1017,7 @@ window.THD = window.THD || {};
                 const notSetShare = totalSessions ? Math.round((notSet.sessions / totalSessions) * 100) : 0;
                 if (notSetShare >= 5) {
                     const figure = highlight(notSetShare + "%", "neg");
-                    const notSetLabel = `<strong>${window.I18N.channelLabel("(not set)")}</strong>`;
+                    const notSetLabel = `<strong>${escapeHtml(window.I18N.channelLabel("(not set)"))}</strong>`;
                     insights.push(window.I18N.t("insight.notSetShare", { figure, notSet: notSetLabel }));
                 }
             }
@@ -698,7 +1031,8 @@ window.THD = window.THD || {};
             ];
             let biggest = null;
             movers.forEach(({ key, labelKey }) => {
-                const d = kpi[key] ? kpi[key].delta : 0;
+                const d = kpi[key] ? kpi[key].delta : null;
+                if (d === null) return;
                 if (!biggest || Math.abs(d) > Math.abs(biggest.delta)) biggest = { labelKey, delta: d };
             });
             if (biggest) {
@@ -708,7 +1042,7 @@ window.THD = window.THD || {};
             }
         }
 
-        if (hasCompareData && kpi && kpi.cvr) {
+        if (hasCompareData && kpi && kpi.cvr && kpi.cvr.delta !== null) {
             const d = kpi.cvr.delta;
             const figure = highlight(`${kpi.cvr.value.toFixed(2)}%`, d >= 0 ? "pos" : "neg");
             const direction = window.I18N.t(d >= 0 ? "insight.cvrImproved" : "insight.cvrDeclined");
@@ -726,9 +1060,19 @@ window.THD = window.THD || {};
        window.
     ========================================================== */
 
-    function buildNewRepeatInsights(rows) {
+    function isOpenBusinessMonth(r) {
+        return Number.isFinite(r.year) && Number.isFinite(r.month) &&
+            new Date() <= new Date(r.year, r.month - 1, 20, 23, 59, 59);
+    }
+
+    function buildNewRepeatInsights(allRows) {
         const insights = [];
-        if (!rows || rows.length < 2) return insights;
+        // An open business month (closes on the 20th) isn't comparable
+        // with complete ones — leave it out of every comparison here.
+        const rows = (allRows || []).filter((r) => !isOpenBusinessMonth(r));
+        if (rows.length < 2) return insights;
+        const byYm = new Map();
+        rows.forEach((r) => { if (Number.isFinite(r.year)) byYm.set(r.year * 12 + r.month, r); });
 
         const latest = rows[rows.length - 1];
         const orderShare = (r) => (r.newOrders + r.repeatOrders)
@@ -740,8 +1084,8 @@ window.THD = window.THD || {};
 
         // New customer share of orders, with YoY comparison once a
         // full year of history is available.
-        if (rows.length > 12) {
-            const yearAgo = rows[rows.length - 13];
+        const yearAgo = Number.isFinite(latest.year) ? byYm.get((latest.year - 1) * 12 + latest.month) : (rows.length > 12 ? rows[rows.length - 13] : null);
+        if (yearAgo) {
             const diff = latestShare - orderShare(yearAgo);
             const figure = highlight(`${Math.abs(diff).toFixed(1)} ${window.I18N.t("unit.pts")}`, diff >= 0 ? "pos" : "neg");
             const direction = window.I18N.t(diff >= 0 ? "newRepeatInsight.up" : "newRepeatInsight.down");
@@ -781,7 +1125,12 @@ window.THD = window.THD || {};
         // Recent direction: average new-customer share over the last
         // 3 months vs the 3 months before that.
         if (rows.length >= 6) {
-            const avgShare = (arr) => arr.reduce((sum, r) => sum + orderShare(r), 0) / arr.length;
+            // Volume-weighted (Σnew / Σtotal), not an average of monthly shares.
+            const avgShare = (arr) => {
+                const n = arr.reduce((s, r) => s + r.newOrders, 0);
+                const tot = arr.reduce((s, r) => s + r.newOrders + r.repeatOrders, 0);
+                return tot ? (n / tot) * 100 : 0;
+            };
             const trendDiff = avgShare(rows.slice(-3)) - avgShare(rows.slice(-6, -3));
             if (Math.abs(trendDiff) >= 1) {
                 const figure = highlight(`${Math.abs(trendDiff).toFixed(1)} ${window.I18N.t("unit.pts")}`, trendDiff >= 0 ? "pos" : "neg");
@@ -826,9 +1175,11 @@ window.THD = window.THD || {};
     // anomaly. Strip it before anomaly detection only; KPI totals
     // still include today, since "This Month" etc. should naturally
     // include today-so-far like any other dashboard.
-    function excludeToday(labels, series) {
-        const todayLabel = window.I18N.formatDayLabel(new Date());
-        if (!labels.length || labels[labels.length - 1] !== todayLabel) {
+    function excludeToday(labels, series, dates) {
+        const isToday = dates && dates.length
+            ? dates[dates.length - 1] === toLocalDateKey(startOfDay(new Date()))
+            : labels.length && labels[labels.length - 1] === window.I18N.formatDayLabel(new Date());
+        if (!labels.length || !isToday) {
             return { labels, series };
         }
         const trimmedSeries = {};
@@ -838,25 +1189,81 @@ window.THD = window.THD || {};
         return { labels: labels.slice(0, -1), series: trimmedSeries };
     }
 
-    function detectAnomalies(labels, series) {
+    // Out-of-sample baseline: each day is compared with the same weekday
+    // over the previous 8 weeks (from the full history, so the day being
+    // tested never sits in its own yardstick). Robust z = (actual −
+    // median) / (1.4826 × MAD), with a floor on the scale (10% of the
+    // median) so a perfectly steady baseline can't make every wobble an
+    // "anomaly" or — the opposite bug — silently skip the metric.
+    const ROBUST_Z_THRESHOLD = 3.5;
+    const ROBUST_MIN_BASELINE = 6;     // of the 8 prior same-weekday days
+    const ROBUST_MIN_REL_CHANGE = 0.3; // and at least ±30% vs that baseline
+
+    function sameWeekdayBaseline(history, dateStr, key) {
+        const d = parseLocalDate(dateStr);
+        const base = [];
+        for (let w = 1; w <= 8; w++) {
+            const p = new Date(d);
+            p.setDate(p.getDate() - 7 * w);
+            const row = history.get(toLocalDateKey(p));
+            if (row && Number.isFinite(row[key])) base.push(row[key]);
+        }
+        return base;
+    }
+
+    function detectAnomalies(labels, series, opts) {
         const anomalies = [];
+        const dates = opts && opts.dates;
+        const history = opts && opts.history;
 
         Object.keys(series || {}).forEach((key) => {
             const values = series[key] || [];
             const n = values.length;
             if (n < ANOMALY_MIN_DAYS) return;
+            const format = ANOMALY_FORMATTERS[key] || ((v) => v);
+
+            if (history && dates && dates.length >= n && key !== "cvr") {
+                values.forEach((v, i) => {
+                    const base = sameWeekdayBaseline(history, dates[i], key);
+                    if (base.length < ROBUST_MIN_BASELINE) return;
+                    const med = median(base);
+                    const mad = median(base.map((b) => Math.abs(b - med)));
+                    const scale = Math.max(1.4826 * mad, 0.1 * Math.abs(med), 1);
+                    const z = (v - med) / scale;
+                    const rel = med ? Math.abs(v - med) / Math.abs(med) : Infinity;
+                    if (Math.abs(z) < ROBUST_Z_THRESHOLD || rel < ROBUST_MIN_REL_CHANGE) return;
+                    anomalies.push({
+                        key,
+                        index: i,
+                        value: v,
+                        mean: med,
+                        weekdayAdjusted: true,
+                        metric: window.I18N.t(ANOMALY_METRIC_I18N_KEYS[key] || key),
+                        date: labels[i],
+                        valueText: format(v),
+                        meanText: format(med),
+                        robustZ: z,
+                        // editorial ranking uses a bounded strength, kept separate from the statistic
+                        z: Math.sign(z) * Math.min(Math.abs(z) / 1.75, 6),
+                        direction: z > 0 ? "spike" : "drop"
+                    });
+                });
+                return;
+            }
 
             const mean = values.reduce((a, b) => a + b, 0) / n;
             const variance = values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / n;
             const stdDev = Math.sqrt(variance);
             if (!stdDev) return;
 
-            const format = ANOMALY_FORMATTERS[key] || ((v) => v);
-
             values.forEach((v, i) => {
                 const z = (v - mean) / stdDev;
                 if (Math.abs(z) >= ANOMALY_Z_THRESHOLD) {
                     anomalies.push({
+                        key,
+                        index: i,
+                        value: v,
+                        mean,
                         metric: window.I18N.t(ANOMALY_METRIC_I18N_KEYS[key] || key),
                         date: labels[i],
                         valueText: format(v),
@@ -872,9 +1279,10 @@ window.THD = window.THD || {};
         return anomalies;
     }
 
-    function buildAnomalyInsights(labels, series) {
-        const trimmed = excludeToday(labels, series);
-        return detectAnomalies(trimmed.labels, trimmed.series)
+    function buildAnomalyInsights(labels, series, opts) {
+        const trimmed = excludeToday(labels, series, opts && opts.dates);
+        const dates = opts && opts.dates ? opts.dates.slice(0, trimmed.labels.length) : null;
+        return detectAnomalies(trimmed.labels, trimmed.series, { dates, history: opts && opts.history })
             .slice(0, 2)
             .map((a) => {
                 const verb = window.I18N.t(a.direction === "spike" ? "anomaly.spike" : "anomaly.drop");
@@ -909,6 +1317,8 @@ window.THD = window.THD || {};
        exact same grouping (platform/channel) currently on screen.
     ========================================================== */
 
+    const CHANNEL_ANOMALY_MIN_MEAN = 20; // sessions/day
+
     function buildChannelAnomalyInsights(sourceRows, channels, groupBy, range) {
         if (!channels || !channels.length || !range) return [];
 
@@ -916,11 +1326,20 @@ window.THD = window.THD || {};
         channels.forEach((c) => {
             const trend = buildChannelTrend(sourceRows, c.label, groupBy, range);
             const trimmed = excludeToday(trend.labels, { sessions: trend.series.sessions.current });
-            const values = trimmed.series.sessions;
+            let values = trimmed.series.sessions;
+            if (c.label === "(not set)") {
+                // GA4 is still attributing the newest days — a "(not set)"
+                // spike there is processing lag, not an event.
+                const keep = Math.round((settledCutoff() - range.start) / 86400000) + 1;
+                values = values.slice(0, Math.max(0, keep));
+            }
             const n = values.length;
             if (n < ANOMALY_MIN_DAYS) return;
 
             const mean = values.reduce((a, b) => a + b, 0) / n;
+            // Tiny channels swing wildly in relative terms (2 -> 6
+            // sessions is a "spike" by z-score) — skip them.
+            if (mean < CHANNEL_ANOMALY_MIN_MEAN) return;
             const variance = values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / n;
             const stdDev = Math.sqrt(variance);
             if (!stdDev) return;
@@ -961,7 +1380,7 @@ window.THD = window.THD || {};
             const verb = window.I18N.t(a.direction === "spike" ? "anomaly.spike" : "anomaly.drop");
             const figure = highlight(Math.round(a.value).toLocaleString("en-US"), a.direction === "spike" ? "pos" : "neg");
             const sentence = window.I18N.t("anomaly.sentence", {
-                metric: `<strong>${window.I18N.channelLabel(a.channel)}</strong>`,
+                metric: `<strong>${escapeHtml(window.I18N.channelLabel(a.channel))}</strong>`,
                 verb,
                 date: a.date,
                 figure,
@@ -972,6 +1391,828 @@ window.THD = window.THD || {};
     }
 
     /* ==========================================================
+       Briefing (Overview)
+       Turns everything already computed for the selected period
+       into (1) a one-line headline + supporting sentence and
+       (2) a ranked list of "stories" — what changed, why it
+       matters, and where to look next. Each story carries its own
+       small series for a sparkline and an `action` the UI can hand
+       back to app.js for the click-through, so the Overview reads
+       top to bottom like a morning briefing instead of a grid of
+       numbers the reader has to interpret themselves.
+
+       Scores are deliberately simple and fixed per story type
+       (tracking problems > conversion problems > spikes > FYIs),
+       nudged by size, so the ordering is predictable and easy to
+       tune here rather than emerging from an opaque formula.
+    ========================================================== */
+
+    const BRIEF_MIN_CHANNEL_SESSIONS = 300;
+    // Buckets that aren't acquisition channels — never "the top channel"
+    // and never a "converts well / doesn't convert" story. Internal /
+    // Payment sessions are mid-checkout by definition, so their CVR is
+    // meaningless as a channel metric.
+    const NOT_A_CHANNEL = new Set(["(not set)", "Direct", "Internal / Payment", "Own Sites"]);   // ignore tiny channels for efficiency stories
+    const BRIEF_LOW_CVR_RATIO = 0.4;          // < 40% of site CVR = "not converting"
+    const BRIEF_HIGH_CVR_RATIO = 2;           // >= 2x site CVR = "high-efficiency"
+    const BRIEF_AOV_MOVE_PCT = 10;            // AOV change worth mentioning
+
+    function fmtYenShort(v) {
+        if (Math.abs(v) >= 1e6) return "¥" + (v / 1e6).toFixed(1) + "M";
+        if (Math.abs(v) >= 1e4) return "¥" + Math.round(v / 1e3).toLocaleString("en-US") + "k";
+        return "¥" + Math.round(v).toLocaleString("en-US");
+    }
+    const fmtInt = (v) => Math.round(v).toLocaleString("en-US");
+    const fmtPctSigned = (v) => (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(1) + "%";
+
+    // GA4 keeps filing the freshest ~2 days as "(not set)" until attribution
+    // is processed, so tracking-gap claims are judged on settled days only.
+    const GA4_SETTLE_DAYS = 2;
+    const ATTRIBUTION_GAP_SHARE = 5;          // % of revenue with no real channel worth a story (same bar as the session share)
+
+    // Sessions / revenue by "is it attributed" over the settled part of the
+    // current window, plus (not set) sessions in the previous window scaled
+    // to the same number of days. null when no settled day is in range.
+    // Last day GA4 has finished attributing (today and the 2 days before it are not).
+    function settledCutoff() {
+        const cutoff = new Date();
+        cutoff.setHours(0, 0, 0, 0);
+        cutoff.setDate(cutoff.getDate() - GA4_SETTLE_DAYS - 1);
+        return cutoff;
+    }
+
+    function settledAttribution(sourceRows, range, groupBy) {
+        if (!sourceRows || !sourceRows.length || !range || !range.start || !range.end) return null;
+        const cutoff = settledCutoff();
+        const end = cutoff < range.end ? cutoff : range.end;
+        if (end < range.start) return null;
+        const days = (a, b) => Math.round((b - a) / 86400000) + 1;
+        const out = { sessions: 0, revenue: 0, notSetSessions: 0, notSetRevenue: 0, internalRevenue: 0, prevNotSet: 0, trimmed: end < range.end };
+        sourceRows.forEach((r) => {
+            const d = parseLocalDate(r.date);
+            const label = classifyForGroupBy(r, groupBy || "platform");
+            if (d >= range.start && d <= end) {
+                out.sessions += r.sessions;
+                out.revenue += r.revenue;
+                if (label === "(not set)") { out.notSetSessions += r.sessions; out.notSetRevenue += r.revenue; }
+                else if (label === "Internal / Payment") out.internalRevenue += r.revenue;
+            } else if (range.prevStart && d >= range.prevStart && d <= range.prevEnd && label === "(not set)") {
+                out.prevNotSet += r.sessions;
+            }
+        });
+        if (range.prevStart) out.prevNotSet *= days(range.start, end) / days(range.prevStart, range.prevEnd);
+        return out;
+    }
+
+    // input: {
+    //   kpi, hasCompareData, labels, series,        — from filterDailyRange
+    //   channels,                                   — deriveTrafficBreakdown(current).channels
+    //   comparisonRows,                             — buildTrafficComparison()
+    //   channelAnomalies,                           — buildChannelAnomalyInsights()
+    //   risingPage, pageSpikes,                     — landing-page detectors
+    //   sourceRows, groupBy, range                  — for per-channel sparklines
+    // }
+    function buildBriefing(input) {
+        const t = window.I18N.t;
+        const chLabel = (l) => escapeHtml(window.I18N.channelLabel(l));
+        const { kpi, hasCompareData, channels = [], comparisonRows = [], range } = input;
+        const stories = [];
+
+        // (1) Nothing in the window yet (e.g. "Today" before the first
+        // export lands) — say so instead of "Revenue ¥0, −100%" and a
+        // "CVR 0.00% below target" lead story.
+        if (!kpi.sessions || !kpi.sessions.value) {
+            return { headline: { main: t(input.feedFailed ? "brief.headline.failed" : "brief.headline.empty"), dek: "" }, stories: [] };
+        }
+        // A partial day (Today, or the 1st of the month) compared against
+        // full days isn't a fair fight — keep the numbers, drop the
+        // comparisons that would read as a collapse.
+        const fairCompare = hasCompareData && !(range && range.partial);
+
+        const channelSpark = (label) => {
+            if (!input.sourceRows || !range) return null;
+            const trend = buildChannelTrend(input.sourceRows, label, input.groupBy, range);
+            return { values: trend.series.sessions.current, compare: trend.series.sessions.previous, labels: trend.labels };
+        };
+
+        const siteCvr = kpi.cvr.value;
+        const totalRevenue = channels.reduce((s, c) => s + c.revenue, 0);
+        const totalSessions = channels.reduce((s, c) => s + c.sessions, 0);
+
+        // ---- 1. Tracking gap: unattributed sessions ----
+        // Skipped on a partial day, and judged without the newest days: GA4
+        // reports the freshest sessions as "(not set)" until attribution is
+        // processed, which is lag, not a broken tracker.
+        const settled = channels.length && !(range && range.partial)
+            ? settledAttribution(input.sourceRows, range, input.groupBy) : null;
+        const settledNote = settled && settled.trimmed ? " " + t("brief.tracking.settledNote", { n: GA4_SETTLE_DAYS }) : "";
+        if (settled && settled.sessions && settled.notSetSessions) {
+            const cur = settled.notSetSessions;
+            const prev = Math.round(settled.prevNotSet);
+            const share = (cur / settled.sessions) * 100;
+            const growth = prev ? ((cur - prev) / prev) * 100 : null;
+            const jumped = growth !== null && growth >= 100 && cur >= 200;
+            if (share >= 5 || jumped) {
+                stories.push({
+                    id: "tracking",
+                    tone: "alert",
+                    kicker: t("brief.kicker.tracking"),
+                    title: jumped
+                        ? t("brief.tracking.jumpTitle", { prev: fmtInt(prev), cur: fmtInt(cur) })
+                        : t("brief.tracking.shareTitle", { share: share.toFixed(0) }),
+                    body: t("brief.tracking.body", { share: share.toFixed(1) }) + settledNote,
+                    stat: jumped ? fmtPctSigned(growth) : share.toFixed(0) + "%",
+                    spark: channelSpark("(not set)"),
+                    action: { type: "channel", channel: "(not set)" },
+                    score: 95 + Math.min(share, 20)
+                });
+            }
+        }
+
+        // ---- 1b. Attribution health: revenue sitting on rows that aren't channels ----
+        // Orders credited to payment redirects / own domains / "(not set)"
+        // really belong to ads, search, email... so every channel is understated.
+        if (settled && settled.revenue > 0) {
+            const lost = settled.internalRevenue + settled.notSetRevenue;
+            const share = (lost / settled.revenue) * 100;
+            if (share >= ATTRIBUTION_GAP_SHARE) {
+                stories.push({
+                    id: "attribution",
+                    // A reading note, not a to-do: readers can't act on it (it's a
+                    // GA4 admin setting), so it's an FYI that sits low in the list.
+                    tone: "info",
+                    kicker: t("brief.kicker.tracking"),
+                    title: t("brief.attribution.title", { share: share.toFixed(0), amount: fmtYenShort(lost) }),
+                    body: t("brief.attribution.body", {
+                        internal: fmtYenShort(settled.internalRevenue),
+                        notSet: fmtYenShort(settled.notSetRevenue)
+                    }),
+                    stat: share.toFixed(0) + "%",
+                    spark: null,
+                    action: { type: "channel", channel: settled.internalRevenue >= settled.notSetRevenue ? "Internal / Payment" : "(not set)" },
+                    score: 18 + Math.min(share / 5, 6)
+                });
+            }
+        }
+
+        // GA4 under-counts purchases from Meta ads (in-app browser, buying
+        // later on another device), so its "this traffic isn't buying" verdict
+        // is checked against real orders from the ads feed when there are any.
+        const adsTotals = input.adsTotals && input.adsTotals.orders > 0 && input.adsTotals.spend > 0 ? input.adsTotals : null;
+        const adsCovers = (label) => label === "Meta Ads" && !!adsTotals;
+
+        // ---- 3. Channel efficiency: traffic that doesn't convert / converts unusually well ----
+        // Not on a partial day: GA4 attributes the freshest purchases late,
+        // so channel CVRs read artificially low until the day is processed.
+        if (siteCvr > 0 && !(range && range.partial)) {
+            const eligible = channels.filter((c) => c.sessions >= BRIEF_MIN_CHANNEL_SESSIONS && !NOT_A_CHANNEL.has(c.label));
+            // vs the REST of the site, so a big channel isn't compared with itself
+            // Rest-of-site from the SAME source feed (not the daily feed,
+            // whose totals and coverage can differ), and only when the
+            // channel would expect enough purchases for a rate to mean much.
+            const sitePurchases = channels.reduce((s, c) => s + (c.cvr / 100) * c.sessions, 0);
+            const siteSessions = totalSessions;
+            const sourceCvr = siteSessions ? sitePurchases / siteSessions : 0;
+            const zVsRest = (c) => {
+                if (c.sessions * sourceCvr < 20) return 0;
+                const p = (c.cvr / 100) * c.sessions;
+                return twoProportionZ(p, c.sessions, sitePurchases - p, siteSessions - c.sessions);
+            };
+            const weak = eligible
+                .filter((c) => c.cvr < siteCvr * BRIEF_LOW_CVR_RATIO && zVsRest(c) <= -2)
+                .sort((a, b) => b.sessions - a.sessions)[0];
+            if (weak && adsCovers(weak.label)) {
+                stories.push({
+                    id: "adsReconcile",
+                    tone: "info",
+                    kicker: t("brief.kicker.channel"),
+                    title: t("brief.adsReconcile.title", {
+                        label: chLabel(weak.label), cvr: weak.cvr.toFixed(2),
+                        orders: fmtInt(adsTotals.orders), roas: Math.round(adsTotals.roas)
+                    }),
+                    body: t("brief.adsReconcile.body", {
+                        spend: fmtYenShort(adsTotals.spend), orders: fmtInt(adsTotals.orders), revenue: fmtYenShort(adsTotals.revenue)
+                    }) + (input.adsThrough ? " " + t("brief.adsReconcile.through", { date: input.adsThrough }) : ""),
+                    stat: Math.round(adsTotals.roas) + "%",
+                    spark: channelSpark(weak.label),
+                    action: { type: "view", view: "ads" },
+                    score: 58
+                });
+            } else if (weak) {
+                const row = comparisonRows.find((r) => r.label === weak.label);
+                const prev = row && row.previous ? row.previous.sessions : 0;
+                const growth = prev ? ((weak.sessions - prev) / prev) * 100 : null;
+                stories.push({
+                    id: "weakChannel",
+                    tone: "bad",
+                    kicker: t("brief.kicker.channel"),
+                    title: t("brief.weak.title", { label: chLabel(weak.label), cvr: weak.cvr.toFixed(2) }),
+                    body: t(growth !== null && growth > 20 ? "brief.weak.bodyGrowing" : "brief.weak.body", {
+                        sessions: fmtInt(weak.sessions),
+                        growth: growth !== null ? fmtPctSigned(growth) : "",
+                        revenue: fmtYenShort(weak.revenue),
+                        site: siteCvr.toFixed(2)
+                    }) + (weak.label === "Meta Ads" && input.adsAvailable ? " " + t("brief.weak.adsNote") : ""),
+                    stat: weak.cvr.toFixed(2) + "%",
+                    spark: channelSpark(weak.label),
+                    action: { type: "channel", channel: weak.label },
+                    score: 70 + Math.min((weak.sessions / Math.max(totalSessions, 1)) * 100, 15)
+                });
+            }
+            const strong = eligible
+                .filter((c) => c.cvr >= siteCvr * BRIEF_HIGH_CVR_RATIO && zVsRest(c) >= 2)
+                .sort((a, b) => b.revenue - a.revenue)[0];
+            if (strong) {
+                stories.push({
+                    id: "strongChannel",
+                    tone: "good",
+                    kicker: t("brief.kicker.channel"),
+                    title: t("brief.strong.title", { label: chLabel(strong.label), cvr: strong.cvr.toFixed(2) }),
+                    body: t("brief.strong.body", {
+                        site: siteCvr.toFixed(2),
+                        revenue: fmtYenShort(strong.revenue),
+                        share: totalRevenue ? ((strong.revenue / totalRevenue) * 100).toFixed(0) : "0"
+                    }),
+                    stat: (strong.cvr / siteCvr).toFixed(1) + "×",
+                    spark: channelSpark(strong.label),
+                    action: { type: "channel", channel: strong.label },
+                    score: 40
+                });
+            }
+        }
+
+        // ---- 4. Day-level spikes/drops in the headline metrics ----
+        const trimmed = excludeToday(input.labels || [], {
+            sessions: (input.series || {}).sessions || [],
+            revenue: (input.series || {}).revenue || [],
+            purchases: (input.series || {}).purchases || []
+        }, input.dates);
+        const seenDays = new Set();
+        const dayStories = {}; // date label -> story, so channel spikes on the same day can explain it
+        const anomalyDates = input.dates ? input.dates.slice(0, trimmed.labels.length) : null;
+        detectAnomalies(trimmed.labels, trimmed.series, { dates: anomalyDates, history: input.history }).forEach((a) => {
+            // One story per day — a revenue spike usually comes with a
+            // purchases spike on the same day; that's one event.
+            if (seenDays.has(a.date) || seenDays.size >= 2) return;
+            seenDays.add(a.date);
+            const isRevenue = a.key === "revenue";
+            const fmt = isRevenue ? fmtYenShort : fmtInt;
+            const spike = a.direction === "spike";
+            stories.push(dayStories[a.date] = {
+                id: "dayAnomaly-" + a.date,
+                tone: spike ? "good" : "bad",
+                kicker: t("brief.kicker.day"),
+                title: t(spike ? "brief.day.spikeTitle" : "brief.day.dropTitle", { date: a.date, metric: a.metric }),
+                body: t(a.weekdayAdjusted ? "brief.day.bodyDow" : "brief.day.body", { value: fmt(a.value), mean: fmt(a.mean) }),
+                stat: (a.value / (a.mean || 1)).toFixed(1) + "×",
+                spark: { values: trimmed.series[a.key], highlight: a.index },
+                action: { type: "metric", metric: a.key },
+                score: 55 + Math.min(Math.abs(a.z) * 4, 15)
+            });
+        });
+
+        // ---- 5. Channel-level spikes (skip channels already covered above) ----
+        // A channel spiking on the same day as a site-wide spike is the
+        // EXPLANATION of that spike, not a separate story — fold it in
+        // as "driven by …" instead of listing it again below.
+        const covered = new Set(stories.filter((s) => s.action && s.action.channel).map((s) => s.action.channel));
+        const drivers = {};
+        (input.channelAnomalies || []).forEach((a) => {
+            if (a.direction === "spike" && dayStories[a.date] && dayStories[a.date].tone === "good") {
+                (drivers[a.date] = drivers[a.date] || []).push(a);
+                return;
+            }
+            if (covered.has(a.channel)) return;
+            const spike = a.direction === "spike";
+            const spark = channelSpark(a.channel);
+            stories.push({
+                id: "channelAnomaly-" + a.channel,
+                tone: spike ? "info" : "bad",
+                kicker: t("brief.kicker.channel"),
+                title: t(spike ? "brief.chDay.spikeTitle" : "brief.chDay.dropTitle", { date: a.date, label: chLabel(a.channel) }),
+                body: t("brief.day.body", { value: fmtInt(a.value), mean: fmtInt(a.mean) }),
+                stat: (a.value / (a.mean || 1)).toFixed(1) + "×",
+                spark: spark ? { ...spark, highlight: spark.labels.indexOf(a.date) } : null,
+                action: { type: "channel", channel: a.channel },
+                score: 45 + Math.min(Math.abs(a.z) * 3, 10)
+            });
+        });
+
+        Object.keys(drivers).forEach((date) => {
+            const story = dayStories[date];
+            const list = drivers[date].map((a) => t("brief.day.driverItem", {
+                label: chLabel(a.channel), mean: fmtInt(a.mean), value: fmtInt(a.value)
+            })).join(t("brief.dek.sep"));
+            story.body += " " + t("brief.day.drivers", { list });
+            // Clicking now opens the biggest driver's channel trend —
+            // the most useful next step for "why did this day spike".
+            story.action = { type: "channel", channel: drivers[date][0].channel };
+        });
+
+        // ---- 6. Average order value ----
+        if (fairCompare && kpi.aov && kpi.aov.delta !== null && Math.abs(kpi.aov.delta) >= BRIEF_AOV_MOVE_PCT) {
+            const up = kpi.aov.delta > 0;
+            stories.push({
+                id: "aov",
+                tone: up ? "good" : "bad",
+                kicker: t("brief.kicker.basket"),
+                title: t(up ? "brief.aov.upTitle" : "brief.aov.downTitle", { pct: fmtPctSigned(kpi.aov.delta) }),
+                body: t("brief.aov.body", { prev: fmtYenShort(kpi.aov.previous), cur: fmtYenShort(kpi.aov.value) }),
+                stat: fmtYenShort(kpi.aov.value),
+                spark: { values: input.series.aov },
+                action: { type: "metric", metric: "aov" },
+                score: 50
+            });
+        }
+
+        // ---- 7. Landing pages: the 7-day riser + today/yesterday spikes, one story each ----
+        if (input.risingPage) {
+            const r = input.risingPage;
+            stories.push({
+                id: "risingPage",
+                tone: "info",
+                kicker: t("brief.kicker.page"),
+                title: t("brief.rise.title", { title: escapeHtml(shortPageTitle(r.pageTitle)) }),
+                body: t("brief.rise.body", { prev: fmtInt(r.previous), cur: fmtInt(r.current) }),
+                stat: "+" + Math.round(r.changePct) + "%",
+                spark: { values: (r.dailySessions || []).map((d) => d.sessions), highlight: (r.dailySessions || []).findIndex((d) => d.date === r.spikeDate) },
+                action: { type: "page", insight: r },
+                score: 52
+            });
+        }
+        const spikes = (input.pageSpikes || []).filter((p) => !input.risingPage || p.pageTitle !== input.risingPage.pageTitle);
+        if (spikes.length) {
+            const top = spikes[0];
+            stories.push({
+                id: "pageSpikes",
+                tone: "info",
+                kicker: t("brief.kicker.page"),
+                title: spikes.length === 1
+                    ? t("brief.spikes.oneTitle", { title: escapeHtml(shortPageTitle(top.pageTitle)) })
+                    : t("brief.spikes.manyTitle", { n: spikes.length }),
+                body: spikes.slice(0, 3).map((p) => t("brief.spikes.item", {
+                    title: escapeHtml(shortPageTitle(p.pageTitle)), value: fmtInt(p.spikeValue), mean: fmtInt(p.baseline)
+                })).join("<br>"),
+                stat: fmtInt(top.spikeValue),
+                spark: { values: (top.dailySessions || []).map((d) => d.sessions), highlight: (top.dailySessions || []).findIndex((d) => d.date === top.spikeDate) },
+                action: { type: "page", insight: top },
+                score: 48
+            });
+        }
+
+        addDriverStories(input, stories, fairCompare);
+
+        stories.sort((a, b) => b.score - a.score);
+
+        return { headline: buildHeadline(input, stories), stories };
+    }
+
+    /* ==========================================================
+       Insight statistics
+       Small, dependency-free helpers the insight finder leans on.
+       Kept together so the thresholds that decide "is this worth
+       saying" live in one place.
+    ========================================================== */
+
+    function median(values) {
+        const s = values.slice().sort((a, b) => a - b);
+        if (!s.length) return 0;
+        const m = Math.floor(s.length / 2);
+        return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+    }
+
+    // Two-proportion z-test: is rate x1/n1 really different from x2/n2,
+    // or is it within noise? |z| >= 2 ≈ 95% confidence. Used so a CVR
+    // "drop" on 40 sessions doesn't get reported like one on 40,000.
+    function twoProportionZ(x1, n1, x2, n2) {
+        if (!(n1 > 0 && n2 > 0)) return 0;
+        const p = (x1 + x2) / (n1 + n2);
+        const se = Math.sqrt(p * (1 - p) * (1 / n1 + 1 / n2));
+        return se ? (x1 / n1 - x2 / n2) / se : 0;
+    }
+
+    // Revenue = sessions × CVR × order value, so a revenue change splits
+    // exactly into those three effects (log-mean / LMDI decomposition —
+    // the three yen amounts add up to the total change with nothing left
+    // over). Answers "why did revenue move" in money, not percentages.
+    function decomposeRevenue(cur, prev) {
+        const ok = (o) => o && o.sessions > 0 && o.purchases > 0 && o.revenue > 0;
+        if (!ok(cur) || !ok(prev)) return null;
+        const total = cur.revenue - prev.revenue;
+        const L = Math.abs(total) < 1e-9 ? cur.revenue : total / Math.log(cur.revenue / prev.revenue);
+        return {
+            total,
+            sessions: L * Math.log(cur.sessions / prev.sessions),
+            cvr: L * Math.log((cur.purchases / cur.sessions) / (prev.purchases / prev.sessions)),
+            aov: L * Math.log((cur.revenue / cur.purchases) / (prev.revenue / prev.purchases))
+        };
+    }
+
+    // New-customer orders vs the same business month a year earlier,
+    // closed months only (business months close on the 20th). Matched by
+    // (year, month) so a missing month can't shift the comparison.
+    function newCustomerYoY(rows) {
+        const byYm = new Map();
+        (rows || []).forEach((r) => {
+            if (Number.isFinite(r.year) && Number.isFinite(r.month)) byYm.set(r.year * 12 + r.month, r);
+        });
+        const now = new Date();
+        const closed = (rows || []).filter((r) => Number.isFinite(r.year) && Number.isFinite(r.month) &&
+            now > new Date(r.year, r.month - 1, 20, 23, 59, 59));
+        const recent = closed.slice(-13);
+        const pairs = recent
+            .map((r) => ({ r, ly: byYm.get((r.year - 1) * 12 + r.month) }))
+            .filter((p) => p.ly && p.ly.newOrders > 0);
+        if (!pairs.length) return null;
+        const latest = pairs[pairs.length - 1];
+        return {
+            total: pairs.length,
+            below: pairs.filter((p) => p.r.newOrders < p.ly.newOrders).length,
+            above: pairs.filter((p) => p.r.newOrders > p.ly.newOrders).length,
+            latest: { year: latest.r.year, month: latest.r.month, cur: latest.r.newOrders, ly: latest.ly.newOrders }
+        };
+    }
+
+    const fmtYenSigned = (v) => (v >= 0 ? "+" : "−") + fmtYenShort(Math.abs(v));
+
+    const BRIEF_CONCENTRATION_SHARE = 40;   // % of revenue from one platform
+    const BRIEF_LOWYIELD_MIN_ADDED = 1000;  // added sessions before we judge their yield
+    const BRIEF_LOWYIELD_RATIO = 0.5;       // added revenue/session < 50% of site average
+
+    // "Why" stories built from the revenue decomposition, per-platform
+    // contribution to the change, low-yield traffic growth, revenue
+    // concentration and the new-customer trend.
+    function addDriverStories(input, stories, fairCompare) {
+        const t = window.I18N.t;
+        const chLabel = (l) => escapeHtml(window.I18N.channelLabel(l));
+        const { kpi, comparisonRows = [] } = input;
+        const existing = new Set(stories.map((s) => s.action && s.action.channel).filter(Boolean));
+        // GA4's revenue for Meta ads is under-counted; when real orders are on hand, don't judge its yield from GA4.
+        const adsCovers = (label) => label === "Meta Ads" && !!(input.adsTotals && input.adsTotals.orders > 0 && input.adsTotals.spend > 0);
+
+        // ---- A. Traffic up, conversion down (or the reverse) ----
+        if (fairCompare) {
+            const dec = decomposeRevenue(
+                { sessions: kpi.sessions.value, purchases: kpi.purchases.value, revenue: kpi.revenue.value },
+                { sessions: kpi.sessions.previous, purchases: kpi.purchases.previous, revenue: kpi.revenue.previous });
+            const zCvr = twoProportionZ(kpi.purchases.value, kpi.sessions.value, kpi.purchases.previous, kpi.sessions.previous);
+            // Only when CVR moved against traffic, clearly (not noise), and
+            // by enough money to matter (>= 5% of last period's revenue).
+            if (dec && dec.sessions > 0 && dec.cvr < 0 && zCvr <= -2 && Math.abs(dec.cvr) >= 0.05 * kpi.revenue.previous) {
+                stories.push({
+                    id: "cvrDrag",
+                    tone: "bad",
+                    kicker: t("brief.kicker.drivers"),
+                    title: t("brief.drivers.cvrDragTitle", { sess: fmtYenSigned(dec.sessions), cvr: fmtYenSigned(dec.cvr) }),
+                    body: t("brief.drivers.body", {
+                        total: fmtYenSigned(dec.total), s: fmtYenSigned(dec.sessions), c: fmtYenSigned(dec.cvr), a: fmtYenSigned(dec.aov)
+                    }),
+                    stat: fmtYenSigned(dec.cvr),
+                    spark: { values: input.series.cvr },
+                    action: { type: "metric", metric: "cvr" },
+                    score: 74 + Math.min(Math.abs(dec.cvr) / Math.max(kpi.revenue.previous, 1) * 100, 10)
+                });
+            } else if (dec && Math.abs(dec.total) >= 0.03 * kpi.revenue.previous) {
+                // Otherwise: name the single biggest driver in the direction
+                // revenue actually moved (e.g. a 10% fall that was mostly a
+                // drop in order value, not traffic).
+                const effects = [["sessions", dec.sessions], ["cvr", dec.cvr], ["aov", dec.aov]]
+                    .filter(([, v]) => Math.sign(v) === Math.sign(dec.total))
+                    .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+                const lead = effects[0];
+                if (lead && Math.abs(lead[1]) >= 0.5 * Math.abs(dec.total)) {
+                    const down = dec.total < 0;
+                    stories.push({
+                        id: "leadDriver",
+                        tone: down ? "bad" : "good",
+                        kicker: t("brief.kicker.drivers"),
+                        title: t(down ? "brief.drivers.leadDownTitle" : "brief.drivers.leadUpTitle", {
+                            name: t("brief.drivers.name." + lead[0]), amount: fmtYenSigned(lead[1])
+                        }),
+                        body: t("brief.drivers.body", {
+                            total: fmtYenSigned(dec.total), s: fmtYenSigned(dec.sessions), c: fmtYenSigned(dec.cvr), a: fmtYenSigned(dec.aov)
+                        }),
+                        stat: fmtYenSigned(lead[1]),
+                        spark: { values: input.series[lead[0] === "aov" ? "aov" : lead[0] === "cvr" ? "cvr" : "sessions"] },
+                        action: { type: "metric", metric: lead[0] === "aov" ? "aov" : lead[0] === "cvr" ? "cvr" : "sessions" },
+                        score: down ? 66 : 44
+                    });
+                }
+            }
+        }
+
+        // Per-platform current/previous totals (Internal / (not set) aren't channels you can act on).
+        const rows = comparisonRows
+            .filter((r) => !["Internal / Payment", "(not set)"].includes(r.label))
+            .map((r) => {
+                const c = r.current || { sessions: 0, revenue: 0, cvr: 0 };
+                const p = r.previous || { sessions: 0, revenue: 0, cvr: 0 };
+                return {
+                    label: r.label,
+                    cs: c.sessions, ps: p.sessions, cr: c.revenue, pr: p.revenue,
+                    cp: (c.cvr / 100) * c.sessions, pp: (p.cvr / 100) * p.sessions
+                };
+            });
+
+        // Contribution / low-yield compare the SOURCE feed's two windows,
+        // so they need that feed's own coverage, not just the daily feed's.
+        if (fairCompare && input.sourcesComparable && rows.length) {
+            // ---- B. Traffic added without revenue ----
+            const sitePerSession = kpi.sessions.value ? kpi.revenue.value / kpi.sessions.value : 0;
+            const lowYield = rows
+                .filter((r) => r.ps > 0 && r.pp >= 20 && r.cp >= 20 && r.cs - r.ps >= BRIEF_LOWYIELD_MIN_ADDED && (r.cs - r.ps) / r.ps >= 0.2)
+                .map((r) => ({ ...r, addedS: r.cs - r.ps, addedR: r.cr - r.pr, z: twoProportionZ(r.cp, r.cs, r.pp, r.ps) }))
+                .filter((r) => !adsCovers(r.label))
+                .filter((r) => sitePerSession && r.addedR / r.addedS < sitePerSession * BRIEF_LOWYIELD_RATIO && r.z <= -2)
+                .sort((a, b) => b.addedS - a.addedS)[0];
+            if (lowYield) {
+                // the generic "weak channel" story would say less about the same channel
+                for (let i = stories.length - 1; i >= 0; i--) {
+                    if (stories[i].id === "weakChannel" && stories[i].action && stories[i].action.channel === lowYield.label) stories.splice(i, 1);
+                }
+                stories.push({
+                    id: "lowYield",
+                    tone: "bad",
+                    kicker: t("brief.kicker.channel"),
+                    title: t(lowYield.addedR > 0 ? "brief.lowyield.title" : "brief.lowyield.fellTitle", { label: chLabel(lowYield.label), sessions: fmtInt(lowYield.addedS), revenue: fmtYenSigned(lowYield.addedR) }),
+                    body: t("brief.lowyield.body", {
+                        prev: (lowYield.pp / lowYield.ps * 100).toFixed(2),
+                        cur: (lowYield.cp / lowYield.cs * 100).toFixed(2),
+                        perSession: "¥" + Math.round(lowYield.addedR / lowYield.addedS).toLocaleString("en-US"),
+                        sitePerSession: "¥" + Math.round(sitePerSession).toLocaleString("en-US")
+                    }),
+                    stat: "+" + fmtInt(lowYield.addedS),
+                    spark: null,
+                    action: { type: "channel", channel: lowYield.label },
+                    score: 76
+                });
+            }
+
+            // ---- C. What drove the revenue change, in yen ----
+            const moved = rows.map((r) => ({ label: r.label, d: r.cr - r.pr })).filter((r) => Math.abs(r.d) >= 1);
+            const total = kpi.revenue.value - kpi.revenue.previous;
+            const up = moved.filter((r) => r.d > 0).sort((a, b) => b.d - a.d).slice(0, 2);
+            const down = moved.filter((r) => r.d < 0).sort((a, b) => a.d - b.d).slice(0, 2);
+            const lead = total >= 0 ? up[0] : down[0];
+            // Worth a story only when one platform explains a real share of the move.
+            if (lead && Math.abs(total) >= 0.03 * Math.max(kpi.revenue.previous, 1) && Math.abs(lead.d) >= 0.3 * Math.abs(total)) {
+                const item = (r) => t("brief.contrib.item", { label: chLabel(r.label), amount: fmtYenSigned(r.d) });
+                stories.push({
+                    id: "contribution",
+                    tone: total >= 0 ? "good" : "bad",
+                    kicker: t("brief.kicker.drivers"),
+                    title: t("brief.contrib.title", { label: chLabel(lead.label), amount: fmtYenSigned(lead.d), total: fmtYenSigned(total) }),
+                    body: t("brief.contrib.body", {
+                        up: up.length ? up.map(item).join("、") : "—",
+                        down: down.length ? down.map(item).join("、") : "—"
+                    }),
+                    stat: fmtYenSigned(lead.d),
+                    spark: null,
+                    action: { type: "channel", channel: lead.label },
+                    score: 58
+                });
+            }
+        }
+
+        // ---- D. Revenue concentration (by vendor: Google Ads + Google
+        // Organic + Google Referral count together — three Google buckets
+        // can dominate without any one crossing the line) ----
+        const revRows = comparisonRows.filter((r) => r.current && !["Internal / Payment", "(not set)", "Direct", "Own Sites"].includes(r.label));
+        // Share of ALL revenue, so it matches the headline's "X% of revenue".
+        const revTotal = comparisonRows.reduce((s, r) => s + (r.current ? r.current.revenue : 0), 0);
+        const vendorOf = (label) => {
+            const m = /^(Google|Meta|Yahoo|Bing) (Ads|Organic|Referral)$/.exec(label);
+            return m ? m[1] : label;
+        };
+        const vendors = new Map();
+        revRows.forEach((r) => {
+            const v = vendorOf(r.label);
+            const e = vendors.get(v) || { vendor: v, revenue: 0, labels: [] };
+            e.revenue += r.current.revenue;
+            e.labels.push(r.label);
+            vendors.set(v, e);
+        });
+        const ranked = Array.from(vendors.values()).sort((a, b) => b.revenue - a.revenue);
+        if (revTotal && ranked[0]) {
+            const top = ranked[0];
+            const share = top.revenue / revTotal * 100;
+            const topLabel = top.labels.length === 1 ? chLabel(top.labels[0]) : escapeHtml(top.vendor);
+            const related = stories.find((s) => s.action && top.labels.includes(s.action.channel));
+            if (share >= BRIEF_CONCENTRATION_SHARE && related) {
+                // Same platform already has a story — add the dependence fact to it.
+                related.body += " " + t("brief.concentration.note", { share: share.toFixed(0), label: topLabel });
+            } else if (share >= BRIEF_CONCENTRATION_SHARE) {
+                stories.push({
+                    id: "concentration",
+                    tone: "info",
+                    kicker: t("brief.kicker.risk"),
+                    title: t("brief.concentration.title", { share: share.toFixed(0), label: topLabel }),
+                    body: t("brief.concentration.body", {
+                        next: ranked[1] ? (ranked[1].labels.length === 1 ? chLabel(ranked[1].labels[0]) : escapeHtml(ranked[1].vendor)) : "—",
+                        nextShare: ranked[1] ? (ranked[1].revenue / revTotal * 100).toFixed(0) : "0"
+                    }),
+                    stat: share.toFixed(0) + "%",
+                    spark: null,
+                    action: { type: "channel", channel: top.labels[0] },
+                    score: 38
+                });
+            }
+        }
+
+        // ---- E. New-customer acquisition vs last year ----
+        const ct = input.customerTrend;
+        if (ct && ct.total >= 6 && (ct.below / ct.total >= 0.7 || ct.above / ct.total >= 0.7)) {
+            const down = ct.below / ct.total >= 0.7;
+            stories.push({
+                id: "customers",
+                tone: down ? "bad" : "good",
+                kicker: t("brief.kicker.customers"),
+                title: t(down ? "brief.customers.downTitle" : "brief.customers.upTitle", { n: down ? ct.below : ct.above, total: ct.total }),
+                body: t("brief.customers.body", {
+                    month: window.I18N.formatMonth(ct.latest.year, ct.latest.month - 1),
+                    cur: fmtInt(ct.latest.cur), ly: fmtInt(ct.latest.ly)
+                }),
+                stat: fmtPctSigned((ct.latest.cur - ct.latest.ly) / ct.latest.ly * 100),
+                spark: null,
+                action: { type: "view", view: "sales" },
+                score: down ? 62 : 30
+            });
+        }
+    }
+
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    // Product titles all end in "｜CoolCat公式ショップWEB本店"
+    // (or " | CoolCat公式ブログ") — the store suffix is noise in a headline.
+    function shortPageTitle(title) {
+        return String(title || "").split(/[｜|]/)[0].trim() || title;
+    }
+
+    function buildHeadline(input, stories) {
+        const t = window.I18N.t;
+        const { kpi, channels = [] } = input;
+        const hasCompareData = input.hasCompareData && !(input.range && input.range.partial);
+        const rev = kpi.revenue;
+
+        let main;
+        if (hasCompareData && rev.delta !== null) {
+            main = t(rev.delta >= 0 ? "brief.headline.up" : "brief.headline.down", {
+                revenue: `<span class="hlNum">${fmtYenShort(rev.value)}</span>`,
+                delta: `<span class="hlDelta ${rev.delta >= 0 ? "pos" : "neg"}">${fmtPctSigned(rev.delta)}</span>`,
+                vs: t(input.range && input.range.isYoy ? "brief.vs.yoy" : "brief.vs.prev")
+            });
+        } else {
+            main = t("brief.headline.flat", { revenue: `<span class="hlNum">${fmtYenShort(rev.value)}</span>` });
+        }
+
+        const parts = [];
+        const totalRevenue = channels.reduce((s, c) => s + c.revenue, 0);
+        const top = channels.filter((c) => !NOT_A_CHANNEL.has(c.label)).sort((a, b) => b.revenue - a.revenue)[0];
+        if (top && totalRevenue) {
+            parts.push(t("brief.dek.topChannel", {
+                label: window.I18N.channelLabel(top.label),
+                share: Math.round((top.revenue / totalRevenue) * 100)
+            }));
+        }
+        const dec = hasCompareData ? decomposeRevenue(
+            { sessions: kpi.sessions.value, purchases: kpi.purchases.value, revenue: kpi.revenue.value },
+            { sessions: kpi.sessions.previous, purchases: kpi.purchases.previous, revenue: kpi.revenue.previous }) : null;
+        if (dec) {
+            parts.push(t("brief.dek.decomp", {
+                sessions: fmtYenSigned(dec.sessions), cvr: fmtYenSigned(dec.cvr), aov: fmtYenSigned(dec.aov)
+            }));
+        } else if (hasCompareData && kpi.purchases.delta !== null && kpi.aov && kpi.aov.delta !== null) {
+            parts.push(t("brief.dek.drivers", {
+                orders: fmtPctSigned(kpi.purchases.delta),
+                aov: fmtPctSigned(kpi.aov.delta)
+            }));
+        }
+        if (Number.isFinite(input.yoyRevenueDelta)) {
+            parts.push(t("brief.dek.yoy", { pct: fmtPctSigned(input.yoyRevenueDelta) }));
+        }
+        const firstWarning = stories.find((s) => s.tone === "alert" || s.tone === "bad");
+        if (firstWarning) parts.push(t("brief.dek.watch", { title: firstWarning.title }));
+
+        return { main, dek: parts.join(t("brief.dek.sep")) };
+    }
+
+    /* ==========================================================
+       Traffic tree — one table instead of the old "by platform" /
+       "by channel" dropdown, which showed the same traffic sliced
+       two ways with neither complete:
+         channel  (GA4-style: Paid Search, Direct, …)
+           └ platform (Google Ads, Yahoo Ads, …) — skipped when a
+             channel has only one platform, since that row would just
+             repeat its parent
+               └ source / medium (the raw GA4 value)
+       Channels too small to read (< 0.5% of sessions in both
+       periods) are folded into one "small sources" group, so a
+       single 1-session email doesn't get a "100% CVR" row of its own.
+       Every node carries {groupBy, label} so a click can filter the
+       Session Source table / channel trend to exactly that slice.
+    ========================================================== */
+
+    const TREE_SMALL_SHARE = 0.005;
+
+    function buildTrafficTree(currentRows, previousRows) {
+        const emptyTotals = () => ({ sessions: 0, users: 0, purchases: 0, revenue: 0 });
+        const nodes = new Map(); // id -> node
+        const roots = [];
+
+        const node = (id, level, groupBy, label, parent) => {
+            let n = nodes.get(id);
+            if (!n) {
+                n = { id, level, groupBy, label, cur: emptyTotals(), prev: emptyTotals(), children: [] };
+                nodes.set(id, n);
+                (parent ? parent.children : roots).push(n);
+            }
+            return n;
+        };
+        const add = (rows, period) => {
+            (rows || []).forEach((r) => {
+                const ch = classifyForGroupBy(r, "channel");
+                const pl = classifyForGroupBy(r, "platform");
+                // Platform first: "how is Google Ads doing" is answered by one
+                // row, with its campaign types (P-MAX vs Search, which GA4
+                // files under different channels) inside it.
+                const pN = node("p:" + pl, "platform", "platform", pl, null);
+                const cN = node("c:" + pl + "|" + ch, "channel", "channel", ch, pN);
+                const sN = node(cN.id + "|s:" + r.sourceMedium, "source", "source", r.sourceMedium, cN);
+                cN.platform = pl;
+                sN.platform = pl;
+                sN.channel = ch;
+                [pN, cN, sN].forEach((n) => {
+                    n[period].sessions += r.sessions;
+                    n[period].users += r.users;
+                    n[period].purchases += r.purchases;
+                    n[period].revenue += r.revenue;
+                });
+            });
+        };
+        add(currentRows, "cur");
+        add(previousRows, "prev");
+
+        const finish = (n) => {
+            ["cur", "prev"].forEach((p) => {
+                n[p].cvr = n[p].sessions ? (n[p].purchases / n[p].sessions) * 100 : 0;
+            });
+            n.children.sort((a, b) => b.cur.sessions - a.cur.sessions || b.prev.sessions - a.prev.sessions);
+            n.children.forEach(finish);
+            // A platform with a single campaign type / channel: that level
+            // would just repeat its parent — lift the sources up.
+            if (n.level === "platform" && n.children.length === 1) {
+                const only = n.children[0];
+                n.children = only.children;
+                if (only.soleSource) n.soleSource = only.soleSource;
+            }
+            // A row whose only child is one source would just repeat its own
+            // numbers on the next line — make it a leaf, keep the raw
+            // source / medium for the tooltip.
+            if (n.level !== "source" && n.children.length === 1 && n.children[0].level === "source") {
+                n.soleSource = n.children[0].label;
+                n.children = [];
+            }
+        };
+        roots.forEach(finish);
+        roots.sort((a, b) => b.cur.sessions - a.cur.sessions || b.prev.sessions - a.prev.sessions);
+
+        const totalCur = roots.reduce((s, n) => s + n.cur.sessions, 0) || 1;
+        const totalPrev = roots.reduce((s, n) => s + n.prev.sessions, 0) || 1;
+        const big = [];
+        const small = [];
+        roots.forEach((n) => {
+            // AI assistants and every paid ad platform stay visible however
+            // small — ad efficiency is judged per platform, and AI is a trend
+            // to watch.
+            const alwaysShown = n.label === "AI Assistants" || / Ads$/.test(n.label) || n.label === "Criteo" || n.label === "Paid (Other)";
+            const tiny = !alwaysShown &&
+                n.cur.sessions / totalCur < TREE_SMALL_SHARE && n.prev.sessions / totalPrev < TREE_SMALL_SHARE;
+            (tiny ? small : big).push(n);
+        });
+        if (small.length >= 2) {
+            const g = { id: "g:small", level: "group", groupBy: null, label: "__small__", cur: emptyTotals(), prev: emptyTotals(), children: small };
+            small.forEach((n) => ["cur", "prev"].forEach((p) => {
+                ["sessions", "users", "purchases", "revenue"].forEach((k) => { g[p][k] += n[p][k]; });
+            }));
+            ["cur", "prev"].forEach((p) => { g[p].cvr = g[p].sessions ? (g[p].purchases / g[p].sessions) * 100 : 0; });
+            big.push(g);
+        } else {
+            big.push(...small);
+        }
+        return big;
+    }
+
+    // Depth-first list of every node, for CSV export.
+    function flattenTrafficTree(tree) {
+        const out = [];
+        const walk = (n, depth) => { out.push({ ...n, depth }); n.children.forEach((c) => walk(c, depth + 1)); };
+        (tree || []).forEach((n) => walk(n, 0));
+        return out;
+    }
+
+    /* ==========================================================
        Per-day-per-source rows -> Session Source table +
        Traffic Sources doughnuts. Aggregates matching rows within
        an arbitrary [start, end] window into one row per
@@ -979,19 +2220,27 @@ window.THD = window.THD || {};
        period so the two are built the exact same way.
     ========================================================== */
 
-    function filterSourcesByDates(sourceRows, start, end) {
+    // splitByChannel: GA4 can put the SAME source/medium in different
+    // channels on different days (google / cpc is Paid Search one day,
+    // Cross-network the next). Merging by source/medium alone kept the
+    // first row's channel and moved every session under it, so the
+    // channel doughnut/tree disagreed with the trend chart. The channel
+    // views pass true; the plain Session Source table keeps one row per
+    // source/medium.
+    function filterSourcesByDates(sourceRows, start, end, splitByChannel) {
         const inWindow = sourceRows.filter((r) => inRange(r.date, start, end));
 
-        const totals = {};
+        const totals = Object.create(null);
         inWindow.forEach((r) => {
-            if (!totals[r.sourceMedium]) {
-                totals[r.sourceMedium] = {
+            const key = splitByChannel ? r.sourceMedium + "\u0000" + (r.channel || "") : r.sourceMedium;
+            if (!totals[key]) {
+                totals[key] = {
                     sourceMedium: r.sourceMedium,
                     sessions: 0, users: 0, purchases: 0, revenue: 0,
                     channel: r.channel || null
                 };
             }
-            const t = totals[r.sourceMedium];
+            const t = totals[key];
             t.sessions += r.sessions;
             t.users += r.users;
             t.purchases += r.purchases;
@@ -1048,7 +2297,7 @@ window.THD = window.THD || {};
         const firstHalfDates = new Set(allDates.slice(0, midIdx));
         const secondHalfDates = new Set(allDates.slice(midIdx));
 
-        const totals = {};
+        const totals = Object.create(null);
         inWindow.forEach((r) => {
             const key = r.pageTitle || "(not set)";
             if (!totals[key]) {
@@ -1092,7 +2341,7 @@ window.THD = window.THD || {};
 
         const contentRows = inWindow.filter((r) => r.pageType !== "system");
 
-        const byTitle = {};
+        const byTitle = Object.create(null);
         contentRows.forEach((r) => {
             const key = r.pageTitle || "(not set)";
             if (!byTitle[key]) byTitle[key] = { pageTitle: key, sessions: 0, pc: 0, sp: 0 };
@@ -1133,7 +2382,7 @@ window.THD = window.THD || {};
         if (biggestMover && Math.abs(biggestMover.change) >= 20) {
             const key = biggestMover.change >= 0 ? "landingInsight.rising" : "landingInsight.cooling";
             insights.push(window.I18N.t(key, {
-                title: `<strong>${biggestMover.pageTitle}</strong>`,
+                title: `<strong>${escapeHtml(biggestMover.pageTitle)}</strong>`,
                 figure: highlight(Math.abs(biggestMover.change).toFixed(0) + "%", biggestMover.change >= 0 ? "pos" : "neg")
             }));
         }
@@ -1161,11 +2410,14 @@ window.THD = window.THD || {};
             const deviceLabel = biggestMismatch.spShare > overallSpShare
                 ? window.I18N.t("landing.smartphone")
                 : window.I18N.t("landing.pc");
-            const figure = Math.max(biggestMismatch.spShare, 100 - biggestMismatch.spShare);
+            const spHeavy = biggestMismatch.spShare > overallSpShare;
+            const figure = spHeavy ? biggestMismatch.spShare : 100 - biggestMismatch.spShare;
+            const siteFigure = spHeavy ? overallSpShare : 100 - overallSpShare;
             insights.push(window.I18N.t("landingInsight.deviceMismatch", {
-                title: `<strong>${biggestMismatch.pageTitle}</strong>`,
+                title: `<strong>${escapeHtml(biggestMismatch.pageTitle)}</strong>`,
                 device: deviceLabel,
-                figure: highlight(figure.toFixed(0) + "%", "neutral")
+                figure: highlight(figure.toFixed(0) + "%", "neutral"),
+                site: siteFigure.toFixed(0) + "%"
             }));
         }
 
@@ -1181,7 +2433,7 @@ window.THD = window.THD || {};
         // could easily wash out or miss entirely.
         let biggestSpike = null;
         candidates.forEach((p) => {
-            const byDate = {};
+            const byDate = Object.create(null);
             contentRows
                 .filter((r) => (r.pageTitle || "(not set)") === p.pageTitle)
                 .forEach((r) => { byDate[r.date] = (byDate[r.date] || 0) + r.sessions; });
@@ -1206,7 +2458,7 @@ window.THD = window.THD || {};
         });
         if (biggestSpike) {
             insights.push(window.I18N.t("landingInsight.spike", {
-                title: `<strong>${biggestSpike.pageTitle}</strong>`,
+                title: `<strong>${escapeHtml(biggestSpike.pageTitle)}</strong>`,
                 date: biggestSpike.date,
                 figure: highlight(Math.round(biggestSpike.value).toLocaleString("en-US"), "pos"),
                 mean: Math.round(biggestSpike.mean).toLocaleString("en-US")
@@ -1227,7 +2479,7 @@ window.THD = window.THD || {};
     ========================================================== */
 
     function sumSessionsByTitle(rows) {
-        const map = {};
+        const map = Object.create(null);
         rows.forEach((r) => {
             const key = r.pageTitle || "(not set)";
             map[key] = (map[key] || 0) + r.sessions;
@@ -1264,7 +2516,7 @@ window.THD = window.THD || {};
         for (let d = new Date(win.start); d <= win.end; d.setDate(d.getDate() + 1)) {
             allDates.push(d.toISOString().slice(0, 10));
         }
-        const byDate = {};
+        const byDate = Object.create(null);
         rows
             .filter((r) => (r.pageTitle || "(not set)") === pageTitle)
             .forEach((r) => { byDate[r.date] = (byDate[r.date] || 0) + r.sessions; });
@@ -1308,8 +2560,12 @@ window.THD = window.THD || {};
        or login page isn't the kind of anomaly this is hunting for.
     ========================================================== */
 
-    const RISING_PAGE_MIN_PREV_SESSIONS = 10;
-    const RISING_PAGE_THRESHOLD_PCT = 100;
+    // Editorial gates (from review): a riser needs a real base, a real
+    // absolute gain, and is ranked by sessions added — not by % alone,
+    // which rewarded 14 -> 94 over 300 -> 900.
+    const RISING_PAGE_MIN_PREV_SESSIONS = 30;
+    const RISING_PAGE_MIN_ADDED = 50;
+    const RISING_PAGE_THRESHOLD_PCT = 50;
 
     /* ==========================================================
        Overview "Today/Yesterday Spike" Insights
@@ -1329,7 +2585,21 @@ window.THD = window.THD || {};
     ========================================================== */
 
     const TODAY_YESTERDAY_SPIKE_Z_THRESHOLD = 2;
-    const TODAY_YESTERDAY_SPIKE_MIN_MEAN = 3; // needs a real baseline, not near-zero noise
+    const TODAY_YESTERDAY_SPIKE_MIN_MEAN = 5; // needs a real baseline, not near-zero noise
+    // A spike also has to be big in absolute terms — 8 sessions vs a
+    // usual 3 clears the z-score bar but isn't worth anyone's time,
+    // and at the old thresholds ~80 pages qualified on a normal day.
+    const TODAY_YESTERDAY_SPIKE_MIN_SESSIONS = 30;
+    const TODAY_YESTERDAY_SPIKE_MIN_RATIO = 2; // at least 2x the page's usual day
+
+    function spikeKeyFor(f) {
+        const today = toLocalDateKey(startOfDay(new Date()));
+        const y = startOfDay(new Date());
+        y.setDate(y.getDate() - 1);
+        if (f.date === today) return "landingInsight.spikeToday";
+        if (f.date === toLocalDateKey(y)) return "landingInsight.spikeYesterday";
+        return "landingInsight.spikeOn";
+    }
 
     function buildTodayYesterdaySpikeInsights(landingRows) {
         const win = resolveLast30DayWindow(landingRows);
@@ -1348,7 +2618,7 @@ window.THD = window.THD || {};
             allDates.push(d.toISOString().slice(0, 10));
         }
 
-        const byTitle = {};
+        const byTitle = Object.create(null);
         contentRows.forEach((r) => {
             const key = r.pageTitle || "(not set)";
             if (!byTitle[key]) byTitle[key] = {};
@@ -1374,11 +2644,23 @@ window.THD = window.THD || {};
             [["today", todayStr], ["yesterday", yesterdayStr]].forEach(([dayLabel, dateStr]) => {
                 const value = byDate[dateStr] || 0;
                 const z = (value - mean) / stdDev;
-                if (z >= TODAY_YESTERDAY_SPIKE_Z_THRESHOLD) {
+                if (z >= TODAY_YESTERDAY_SPIKE_Z_THRESHOLD &&
+                    value >= TODAY_YESTERDAY_SPIKE_MIN_SESSIONS &&
+                    value >= mean * TODAY_YESTERDAY_SPIKE_MIN_RATIO) {
                     found.push({ pageTitle, dayLabel, date: dateStr, value, mean, dailySessions });
                 }
             });
         });
+
+        // One entry per page: a page that spiked both days used to be
+        // listed twice. Keep whichever day was the bigger jump.
+        const bestByPage = Object.create(null);
+        found.forEach((f) => {
+            const prev = bestByPage[f.pageTitle];
+            if (!prev || f.value / f.mean > prev.value / prev.mean) bestByPage[f.pageTitle] = f;
+        });
+        found.length = 0;
+        found.push(...Object.values(bestByPage));
 
         // Today's spikes first, then yesterday's; within each day, the
         // most surprising (furthest above its own typical day) first.
@@ -1404,8 +2686,11 @@ window.THD = window.THD || {};
             current: f.value,
             baseline: f.mean,
             spikeSummary: true,
-            sentence: window.I18N.t(f.dayLabel === "today" ? "landingInsight.spikeToday" : "landingInsight.spikeYesterday", {
-                title: `<strong>${f.pageTitle}</strong>`,
+            // "today"/"yesterday" only if the feed's latest date really is
+            // today/yesterday — a stale export gets the actual date instead.
+            sentence: window.I18N.t(spikeKeyFor(f), {
+                date: window.I18N.formatDayLabel(parseLocalDate(f.date)),
+                title: `<strong>${escapeHtml(f.pageTitle)}</strong>`,
                 figure: highlight(Math.round(f.value).toLocaleString("en-US"), "pos"),
                 mean: Math.round(f.mean).toLocaleString("en-US")
             })
@@ -1434,9 +2719,10 @@ window.THD = window.THD || {};
             const current = curMap[title];
             const previous = prevMap[title] || 0;
             if (previous < RISING_PAGE_MIN_PREV_SESSIONS) return;
+            if (current - previous < RISING_PAGE_MIN_ADDED) return;
             const changePct = ((current - previous) / previous) * 100;
             if (changePct < RISING_PAGE_THRESHOLD_PCT) return;
-            if (!best || changePct > best.changePct) {
+            if (!best || current - previous > best.current - best.previous) {
                 best = { pageTitle: title, current, previous, changePct };
             }
         });
@@ -1445,8 +2731,10 @@ window.THD = window.THD || {};
         const { dailySessions, mean, spikeDate, spikeValue } = buildLandingPageDailySeries(contentRows, win, best.pageTitle);
 
         const sentence = window.I18N.t("landingInsight.overviewRising", {
-            title: `<strong>${best.pageTitle}</strong>`,
-            figure: highlight(`+${Math.round(best.changePct)}%`, "pos")
+            title: `<strong>${escapeHtml(best.pageTitle)}</strong>`,
+            figure: highlight(`+${Math.round(best.changePct)}%`, "pos"),
+            previous: Math.round(best.previous).toLocaleString("en-US"),
+            current: Math.round(best.current).toLocaleString("en-US")
         });
 
         return {
@@ -1519,7 +2807,7 @@ window.THD = window.THD || {};
         const dayRows = landingRows.filter((r) => r.date === date && r.pageTitle === pageTitle);
         if (!dayRows.length) return null;
 
-        const totals = {};
+        const totals = Object.create(null);
         let total = 0;
         dayRows.forEach((r) => {
             const label = classifyForGroupBy(r, groupBy);
@@ -1550,7 +2838,7 @@ window.THD = window.THD || {};
         );
         if (!rows.length) return null;
 
-        const totals = {};
+        const totals = Object.create(null);
         rows.forEach((r) => {
             const key = r.sourceMedium || "(not set)";
             if (!totals[key]) totals[key] = { sourceMedium: key, sessions: 0, purchases: 0, revenue: 0 };
@@ -1572,7 +2860,7 @@ window.THD = window.THD || {};
     ========================================================== */
 
     function buildTrafficComparison(currentChannels, previousChannels) {
-        const map = {};
+        const map = Object.create(null);
 
         (currentChannels || []).forEach((c) => {
             map[c.label] = { label: c.label, current: c, previous: null };
@@ -1597,10 +2885,28 @@ window.THD = window.THD || {};
     // days entirely, aligning by offset is what makes the two lines
     // actually comparable side by side, same idea GA4's own
     // date-range-comparison charts use.
-    function buildChannelTrend(sourceRows, channelKey, groupBy, range) {
-        const filtered = sourceRows.filter((r) => classifyForGroupBy(r, groupBy) === channelKey);
+    // toLocaleDateString is slow, and the per-channel trends format the
+    // same few hundred dates once per channel per render (~15k calls
+    // for "This Year") — cache by language + date key.
+    const dayLabelCache = new Map();
+    function dayLabel(key, date) {
+        const k = window.I18N.getLang() + "|" + key;
+        let v = dayLabelCache.get(k);
+        if (v === undefined) {
+            v = window.I18N.formatDayLabel(date);
+            dayLabelCache.set(k, v);
+        }
+        return v;
+    }
 
-        const byDate = {};
+    // channelScope (optional): restrict to rows in that channel too — a
+    // "Google Ads" row clicked under Cross-network means Google Ads
+    // traffic IN Cross-network, not every Google Ads session.
+    function buildChannelTrend(sourceRows, channelKey, groupBy, range, channelScope) {
+        const filtered = sourceRows.filter((r) => classifyForGroupBy(r, groupBy) === channelKey &&
+            (!channelScope || classifyForGroupBy(r, "channel") === channelScope));
+
+        const byDate = Object.create(null);
         filtered.forEach((r) => {
             if (!byDate[r.date]) byDate[r.date] = { users: 0, sessions: 0, purchases: 0, revenue: 0 };
             const d = byDate[r.date];
@@ -1627,13 +2933,17 @@ window.THD = window.THD || {};
             const prevDate = new Date(range.prevStart);
             prevDate.setDate(prevDate.getDate() + i);
 
-            const curKey = curDate.toISOString().slice(0, 10);
-            const prevKey = prevDate.toISOString().slice(0, 10);
+            // Local-date keys: range dates are local midnights, and
+            // toISOString() converts to UTC first — in Japan (UTC+9)
+            // that turned Oct 13 into "2026-10-12", shifting every
+            // channel trend and channel anomaly by one day.
+            const curKey = toLocalDateKey(curDate);
+            const prevKey = toLocalDateKey(prevDate);
             const cur = byDate[curKey] || { users: 0, sessions: 0, purchases: 0, revenue: 0 };
             const prev = byDate[prevKey] || { users: 0, sessions: 0, purchases: 0, revenue: 0 };
 
-            labels.push(window.I18N.formatDayLabel(curDate));
-            previousLabels.push(window.I18N.formatDayLabel(prevDate));
+            labels.push(dayLabel(curKey, curDate));
+            previousLabels.push(dayLabel(prevKey, prevDate));
 
             series.users.current.push(cur.users);
             series.users.previous.push(prev.users);
@@ -1662,7 +2972,7 @@ window.THD = window.THD || {};
     ========================================================== */
 
     function businessMonthOf(dateStr) {
-        const d = new Date(dateStr);
+        const d = parseLocalDate(dateStr);
         let month = d.getMonth(); // 0-indexed
         let year = d.getFullYear();
         if (d.getDate() >= 21) {
@@ -1698,17 +3008,152 @@ window.THD = window.THD || {};
         const rows = sortedKeys.map((key, i) => {
             const b = buckets[key];
             const prev = i > 0 ? buckets[sortedKeys[i - 1]] : null;
+            // The latest bucket is still open until the 20th (business month
+            // = 21st..20th); its trend vs a complete month isn't meaningful.
+            const open = new Date() <= new Date(b.year, b.month, 20, 23, 59, 59);
             return {
+                isOpen: open,
                 month: businessMonthLabel(b.year, b.month),
                 revenue: b.revenue,
                 orders: b.orders,
                 users: b.users,
                 cvr: b.sessions ? (b.orders / b.sessions) * 100 : 0,
-                trend: prev && prev.revenue ? ((b.revenue - prev.revenue) / prev.revenue) * 100 : 0
+                trend: open ? null : (prev && prev.revenue ? ((b.revenue - prev.revenue) / prev.revenue) * 100 : 0)
             };
         });
 
         return rows.slice(-monthsToShow);
+    }
+
+    /* ==========================================================
+       Ads Performance (Meta)
+       One feed, two sources, already joined in the CoolCat 広告パフォー
+       マンス sheet (tab feed_ads, one row per day × campaign):
+       - cost side from Meta Ads Manager: spend, impressions, clicks
+       - result side from the order system: every ad-attributed order, new and
+         repeat, with its real order amount. New vs repeat is the
+         sheet's final verdict (hand flag, confirmed by the weekly
+         order-database check).
+       metaPurchases is Meta's own reported purchase count — shown as
+       a reference only; Meta's conversion VALUE is deliberately not
+       in the feed (it counts existing customers' big orders and runs
+       at 1,000%+ ROAS). No GA4 involved.
+    ========================================================== */
+
+    const AD_SUM_KEYS = ["spend", "impressions", "clicks", "metaPurchases", "orders", "newOrders",
+        "repeatOrders", "revenue", "newRevenue", "repeatRevenue", "newBoughtAgain"];
+
+    function sumAdRows(rows) {
+        const t = {};
+        AD_SUM_KEYS.forEach((k) => { t[k] = 0; });
+        rows.forEach((r) => AD_SUM_KEYS.forEach((k) => { t[k] += r[k] || 0; }));
+        return deriveAdMetrics(t);
+    }
+
+    // null = "can't be computed" (nothing to divide by), never a fake 0
+    function deriveAdMetrics(t) {
+        const div = (a, b) => (b ? a / b : null);
+        return Object.assign(t, {
+            cpm: div(t.spend * 1000, t.impressions),
+            ctr: div(t.clicks * 100, t.impressions),
+            cpc: div(t.spend, t.clicks),
+            roas: div(t.revenue * 100, t.spend),          // %
+            newRoas: div(t.newRevenue * 100, t.spend),
+            repeatRoas: div(t.repeatRevenue * 100, t.spend),
+            cpa: div(t.spend, t.orders),
+            newCpa: div(t.spend, t.newOrders),
+            metaCpa: div(t.spend, t.metaPurchases),
+            aov: div(t.revenue, t.orders),
+            newAov: div(t.newRevenue, t.newOrders),
+            repeatAov: div(t.repeatRevenue, t.repeatOrders),
+            boughtAgainRate: div(t.newBoughtAgain * 100, t.newOrders) // %
+        });
+    }
+
+    function isoDay(d) {
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    }
+
+    // Monday of the week containing d
+    function weekStart(d) {
+        const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+        return x;
+    }
+
+    function listAdProducts(adRows) {
+        return Array.from(new Set((adRows || []).map((r) => r.product).filter(Boolean))).sort();
+    }
+
+    function buildAdsReport(adRows, range, product = "all") {
+        const rows = (adRows || []).filter((r) => product === "all" || r.product === product);
+        const dates = (adRows || []).map((r) => r.date).sort();
+        const firstDate = dates[0] || null;
+        const latestDate = dates[dates.length - 1] || null;
+
+        // The feed is refreshed weekly, so it can stop short of the range.
+        // Compare only the days it covers against the same number of days
+        // at the start of the previous window — not 10 days against 12.
+        const latest = latestDate ? parseLocalDate(latestDate) : null;
+        const short = !!latest && latest >= range.start && latest < range.end;
+        const coveredDays = short ? Math.round((latest - range.start) / 86400000) + 1 : null;
+        let prevEnd = range.prevEnd;
+        if (short) {
+            prevEnd = new Date(range.prevStart);
+            prevEnd.setDate(prevEnd.getDate() + coveredDays - 1);
+        }
+        const cur = rows.filter((r) => inRange(r.date, range.start, range.end));
+        const prev = rows.filter((r) => inRange(r.date, range.prevStart, prevEnd));
+        // Only compare when the feed actually covers the whole previous window.
+        const hasCompare = !!firstDate && parseLocalDate(firstDate) <= range.prevStart;
+
+        // Daily buckets for up to ~2 months, weekly beyond that.
+        const spanDays = Math.round((range.end - range.start) / 86400000) + 1;
+        const granularity = spanDays > 62 ? "week" : "day";
+        const keyOf = (dateStr) => {
+            const d = parseLocalDate(dateStr);
+            return isoDay(granularity === "week" ? weekStart(d) : d);
+        };
+        const buckets = new Map();
+        // Don't draw empty days before the feed starts (e.g. "6 months" when ads began 4 months ago).
+        const chartStart = firstDate && parseLocalDate(firstDate) > range.start ? parseLocalDate(firstDate) : range.start;
+        for (let d = new Date(chartStart); d <= range.end; d.setDate(d.getDate() + 1)) {
+            const k = keyOf(isoDay(d));
+            if (!buckets.has(k)) buckets.set(k, []);
+        }
+        cur.forEach((r) => { const k = keyOf(r.date); if (buckets.has(k)) buckets.get(k).push(r); });
+        const labels = Array.from(buckets.keys());
+        const sums = labels.map((k) => sumAdRows(buckets.get(k)));
+
+        const byCampaign = new Map();
+        cur.forEach((r) => {
+            const k = `${r.platform}::${r.campaign}`;
+            if (!byCampaign.has(k)) byCampaign.set(k, { platform: r.platform, campaign: r.campaign, product: r.product, rows: [] });
+            byCampaign.get(k).rows.push(r);
+        });
+        const campaigns = Array.from(byCampaign.values())
+            .map((c) => Object.assign({ platform: c.platform, campaign: c.campaign, product: c.product }, sumAdRows(c.rows)))
+            .filter((c) => c.spend > 0 || c.orders > 0)
+            .sort((a, b) => b.spend - a.spend);
+
+        return {
+            totals: sumAdRows(cur),
+            prevTotals: sumAdRows(prev),
+            hasCompare,
+            compareDays: coveredDays,   // set when both sides were cut to the days the feed covers
+            firstDate,
+            latestDate,
+            trend: {
+                granularity,
+                labels,
+                spend: sums.map((s) => s.spend),
+                newOrders: sums.map((s) => s.newOrders),
+                repeatOrders: sums.map((s) => s.repeatOrders),
+                revenue: sums.map((s) => s.revenue),
+                roas: sums.map((s) => s.roas)
+            },
+            campaigns
+        };
     }
 
     /* ==========================================================
@@ -1730,7 +3175,7 @@ window.THD = window.THD || {};
         return out;
     }
 
-    THD.data = {
+    CoolCat.data = {
         CONFIG,
         loadDailyGA4,
         loadSources,
@@ -1749,6 +3194,11 @@ window.THD = window.THD || {};
         detectAnomalies,
         buildAnomalyInsights,
         buildChannelAnomalyInsights,
+        buildBriefing,
+        newCustomerYoY,
+        decomposeRevenue,
+        setLatestDataDate,
+        parseLocalDate,
         resolveRange,
         hasDataInRange,
         filterDailyRange,
@@ -1761,9 +3211,18 @@ window.THD = window.THD || {};
         buildTodayYesterdaySpikeInsights,
         buildLandingPageDetail,
         buildTrafficComparison,
+        buildTrafficTree,
+        matchesTrafficFilter,
+        flattenTrafficTree,
         buildChannelTrend,
         computeMovingAverage,
-        buildBusinessMonths
+        buildBusinessMonths,
+        loadAdSpend,
+        isAdsFeedConfigured,
+        isFeedConfigured,
+        rangeHasUnsettledDays,
+        buildAdsReport,
+        listAdProducts
     };
 
-})(window.THD);
+})(window.CoolCat);

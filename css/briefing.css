@@ -1,0 +1,1853 @@
+/* ==========================================================
+   CoolCat Analytics
+   Briefing Theme (v3)
+
+   Loaded last, on top of the original stylesheets. Two jobs:
+
+   1. A new identity for the whole app — "morning paper":
+      warm paper surface, ink text, an editorial serif for
+      headlines (Noto Serif JP), and hairline rules instead of
+      floating cards. The vermilion signal color from v2 stays as
+      the brand accent; four "tone" colors carry meaning in the
+      story feed (alert / watch / good / FYI).
+
+   2. The layout shift from a fixed sidebar to a slim top bar,
+      plus every component of the Overview briefing (headline,
+      vital signs, story feed).
+
+   Everything is token-driven, so dark mode (bottom of file)
+   only has to redefine the tokens.
+========================================================== */
+
+:root{
+
+    --font-display:'Noto Serif JP','Hiragino Mincho ProN','Yu Mincho',serif;
+    --font-ui:'Inter','Noto Sans JP','Hiragino Sans','Hiragino Kaku Gothic ProN',sans-serif;
+    --font-body:var(--font-ui);
+
+    --paper:#F5F1EA;
+    --bg:var(--paper);
+    --surface:#FFFDF9;
+    --surface-2:#FBF7F0;
+    --ink:#1B1813;
+    --text:#1B1813;
+    --text-light:#6E675C;
+    --text-faint:#A39B8E;
+    --border:#E4DCCF;
+    --rule:#1B1813;
+
+    --signal:#E2471D;
+    --signal-light:#FBE3D8;
+
+    --tone-alert:#C9361A;
+    --tone-alert-bg:#FBE1D8;
+    --tone-bad:#A86A12;
+    --tone-bad-bg:#F8ECD3;
+    --tone-good:#2B7A4B;
+    --tone-good-bg:#DDF0E2;
+    --tone-info:#3456BF;
+    --tone-info-bg:#E2E8FA;
+
+    --m-users:#3456BF;
+    --m-sessions:#0F8A8A;
+    --m-purchases:#2B7A4B;
+    --m-revenue:#B8325E;
+    --m-cvr:#6B47D6;
+    --m-aov:#A86A12;
+
+    --success:var(--tone-good);
+    --success-light:var(--tone-good-bg);
+    --danger:var(--tone-alert);
+    --danger-light:var(--tone-alert-bg);
+
+    --radius:12px;
+    --shadow-sm:none;
+    --shadow-md:0 10px 30px rgba(27,24,19,.08);
+
+    --page-max:1180px;
+    --gutter:28px;
+
+}
+
+
+/* ==========================================================
+   Base
+========================================================== */
+
+body{
+
+    background:var(--bg);
+    font-family:var(--font-ui);
+    -webkit-font-smoothing:antialiased;
+
+}
+
+h1,h2,h3,h4{
+
+    font-family:var(--font-display);
+    letter-spacing:.01em;
+
+}
+
+.app{
+
+    display:block;
+
+}
+
+
+/* ==========================================================
+   Top Bar
+========================================================== */
+
+.topbar{
+
+    position:sticky;
+    top:0;
+    z-index:150;
+    background:color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter:saturate(1.2) blur(10px);
+    -webkit-backdrop-filter:saturate(1.2) blur(10px);
+    border-bottom:1px solid var(--border);
+
+}
+
+.topbarInner{
+
+    max-width:var(--page-max);
+    margin:0 auto;
+    padding:0 var(--gutter);
+    height:62px;
+    display:flex;
+    align-items:center;
+    gap:28px;
+
+}
+
+.topbar .logo{
+
+    padding:0;
+    display:flex;
+    align-items:baseline;
+    gap:8px;
+    flex-shrink:0;
+
+}
+
+.topbar .logo h1{
+
+    color:var(--ink);
+    font-size:22px;
+    font-weight:900;
+    letter-spacing:.04em;
+
+}
+
+.topbar .logo span{
+
+    display:inline;
+    color:var(--signal);
+    font-family:var(--font-ui);
+    font-size:11px;
+    letter-spacing:.14em;
+
+}
+
+.topbar .sidebarMenu{
+
+    flex-direction:row;
+    padding:0;
+    gap:4px;
+    flex:1;
+    min-width:0;
+    overflow-x:auto;
+    scrollbar-width:none;
+
+}
+
+.topbar .sidebarMenu::-webkit-scrollbar{ display:none; }
+
+.topbar .sidebarMenu a{
+
+    flex:0 0 auto;
+    flex-direction:row;
+    gap:7px;
+    padding:8px 12px;
+    border-radius:999px;
+    color:var(--text-light);
+    font-size:13.5px;
+    font-weight:500;
+
+}
+
+.topbar .sidebarMenu a span{ display:inline; font-size:inherit; }
+
+.topbar .sidebarMenu a svg{ width:16px; height:16px; }
+
+.topbar .sidebarMenu a:hover{
+
+    background:var(--surface-2);
+    color:var(--text);
+
+}
+
+.topbar .sidebarMenu a.active{
+
+    background:var(--ink);
+    color:var(--paper);
+
+}
+
+.topbar .sidebarMenu a.active::before{ display:none; }
+
+.topbarActions{
+
+    display:flex;
+    align-items:center;
+    gap:10px;
+    flex-shrink:0;
+
+}
+
+.topbarActions .updateCard{
+
+    text-align:right;
+    line-height:1.25;
+    margin-right:4px;
+
+}
+
+.topbarActions .updateCard small{
+
+    color:var(--text-faint);
+    font-size:10.5px;
+
+}
+
+.topbarActions .updateCard strong{
+
+    font-family:var(--font-mono);
+    font-size:12px;
+    font-weight:500;
+
+}
+
+.iconButton{
+
+    width:36px;
+    height:36px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    border-radius:999px;
+    border:1px solid var(--border);
+    background:var(--surface);
+    color:var(--text);
+    cursor:pointer;
+    transition:.2s;
+
+}
+
+.iconButton:hover{ border-color:var(--text-light); }
+
+.iconButton svg{ width:16px; height:16px; }
+
+.primaryButton{
+
+    border-radius:999px;
+    padding:9px 16px;
+    font-family:var(--font-ui);
+    font-size:13px;
+    box-shadow:none;
+    border:none;
+    cursor:pointer;
+
+}
+
+.primaryButton svg{ width:15px; height:15px; }
+
+.secondaryButton{
+
+    border-radius:999px;
+    font-family:var(--font-ui);
+
+}
+
+
+/* ==========================================================
+   Main column
+========================================================== */
+
+.mainContent,
+.app .mainContent{
+
+    margin:0 auto;
+    max-width:var(--page-max);
+    padding:26px var(--gutter) 96px;
+
+}
+
+.pageHeader{
+
+    margin-bottom:18px;
+
+}
+
+.pageHeader h2{
+
+    font-size:30px;
+    font-weight:700;
+
+}
+
+body[data-view="overview"] .pageHeader,
+body[data-view="overview"] .rangeCompareBar{
+
+    display:none;
+
+}
+
+/* Filters read as a quiet row of pills rather than form fields. */
+
+.filterSection{
+
+    gap:8px;
+    margin-bottom:18px;
+
+}
+
+.filterSection select,
+.chartTools select,
+.customRangeInputs input[type="date"]{
+
+    border-radius:999px;
+    padding:8px 34px 8px 14px;
+    font-size:13px;
+    background-color:var(--surface);
+    border-color:var(--border);
+
+}
+
+.rangeCompareBar{
+
+    background:transparent;
+    color:var(--text-light);
+    border:1px solid var(--border);
+    border-radius:999px;
+    padding:8px 16px;
+    margin-top:-6px;
+
+}
+
+.rangeCompareBar strong{ color:var(--text); }
+
+.dataSourceWarning{
+
+    border-radius:var(--radius);
+
+}
+
+/* Cards on the other tabs: flatter, warmer. */
+
+.chartCard,
+.tableCard,
+.insightCard{
+
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    box-shadow:none;
+
+}
+
+.chartCard:hover{ border-color:var(--border); }
+
+.chartHeader h3,
+.tableHeader h3,
+.sectionTitle h3{
+
+    font-size:19px;
+    font-weight:700;
+
+}
+
+
+/* ==========================================================
+   Briefing — headline
+========================================================== */
+
+.brief{
+
+    padding:10px 0 26px;
+    border-bottom:1px solid var(--border);
+    margin-bottom:6px;
+
+}
+
+.briefKicker{
+
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    gap:6px 14px;
+    font-size:12px;
+    font-weight:500;
+    color:var(--text-light);
+    letter-spacing:.02em;
+    margin-bottom:14px;
+
+}
+
+.briefKicker #briefRange{
+
+    color:var(--signal);
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+
+}
+
+.briefKicker .briefCompare.isWarning{ color:var(--tone-bad); }
+
+.briefKicker .briefAsOf{
+
+    font-family:var(--font-mono);
+    font-size:11.5px;
+    padding:2px 8px;
+    border:1px solid var(--border);
+    border-radius:999px;
+
+}
+
+.briefHeadline{
+
+    font-size:clamp(28px, 4.4vw, 50px);
+    line-height:1.22;
+    font-weight:900;
+    letter-spacing:-.005em;
+    max-width:20em;
+    color:var(--ink);
+    text-wrap:balance;
+
+}
+
+.briefHeadline .hlNum{
+
+    font-feature-settings:"tnum";
+    white-space:nowrap;
+
+}
+
+.briefHeadline .hlDelta{
+
+    white-space:nowrap;
+    padding:0 .08em;
+    background-repeat:no-repeat;
+    background-size:100% .38em;
+    background-position:0 88%;
+
+}
+
+.briefHeadline .hlDelta.pos{
+
+    color:var(--tone-good);
+    background-image:linear-gradient(var(--tone-good-bg), var(--tone-good-bg));
+
+}
+
+.briefHeadline .hlDelta.neg{
+
+    color:var(--tone-alert);
+    background-image:linear-gradient(var(--tone-alert-bg), var(--tone-alert-bg));
+
+}
+
+.briefDek{
+
+    margin-top:14px;
+    font-size:16.5px;
+    line-height:1.7;
+    color:var(--text-light);
+    max-width:56em;
+
+}
+
+.briefPartial{
+
+    margin-top:10px;
+    font-size:12.5px;
+    color:var(--tone-bad);
+
+}
+
+
+/* ==========================================================
+   Briefing — vital signs
+   A ruled strip, not a grid of cards: six figures separated
+   by hairlines, each with its own sparkline.
+========================================================== */
+
+.vitals{
+
+    display:grid;
+    grid-template-columns:repeat(6, minmax(0, 1fr));
+    border-bottom:1px solid var(--border);
+    margin-bottom:34px;
+
+}
+
+.vital{
+
+    --vital:var(--text);
+    position:relative;
+    display:flex;
+    flex-direction:column;
+    align-items:flex-start;
+    gap:2px;
+    text-align:left;
+    padding:16px 16px 12px;
+    border:none;
+    border-left:1px solid var(--border);
+    background:transparent;
+    color:var(--text);
+    font:inherit;
+    cursor:pointer;
+    transition:background .2s;
+    min-width:0;
+
+}
+
+.vital:first-child{ border-left:none; }
+
+/* "On the chart" marker. This used to be a top rule that also slid
+   in on hover, so the plotted cards looked like a hover animation
+   that got stuck. Now it's an explicit chip, and hover only tints. */
+
+.vitalOnChart{
+
+    display:none;
+    position:absolute;
+    top:17px;
+    right:12px;
+    align-items:center;
+    gap:5px;
+    white-space:nowrap;
+    font-size:10px;
+    font-weight:600;
+    letter-spacing:.02em;
+    color:var(--vital);
+
+}
+
+.vitalOnChart::before{
+
+    content:"";
+    width:7px;
+    height:7px;
+    border-radius:50%;
+    background:var(--vital);
+
+}
+
+.vital.isPlotted .vitalOnChart{ display:inline-flex; }
+
+.vital:hover{ background:var(--surface-2); }
+
+.vital:focus-visible{ outline:2px solid var(--signal); outline-offset:-2px; }
+
+.vitalLabel{
+
+    font-size:11.5px;
+    font-weight:600;
+    color:var(--text-light);
+    letter-spacing:.04em;
+
+}
+
+.vitalValue{
+
+    font-family:var(--font-mono);
+    font-size:21px;
+    font-weight:500;
+    font-feature-settings:"tnum";
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    max-width:100%;
+
+}
+
+.vitalFoot{
+
+    display:flex;
+    flex-wrap:wrap;
+    gap:4px 8px;
+    align-items:center;
+    font-size:11.5px;
+    min-height:18px;
+
+}
+
+.vitalDelta{
+
+    font-family:var(--font-mono);
+    font-weight:600;
+
+}
+
+.vitalDelta.pos{ color:var(--tone-good); }
+.vitalDelta.neg{ color:var(--tone-alert); }
+.vitalDelta.neutral{ color:var(--text-faint); }
+
+.vital .spark{
+
+    width:100%;
+    height:34px;
+    margin-top:6px;
+    --spark:var(--vital);
+
+}
+
+
+/* ==========================================================
+   Sparklines (shared by vitals and stories)
+========================================================== */
+
+.spark{ display:block; overflow:visible; }
+
+.spark .sparkLine{
+
+    fill:none;
+    stroke:var(--spark, var(--text-light));
+    stroke-width:1.6;
+    stroke-linejoin:round;
+    stroke-linecap:round;
+    vector-effect:non-scaling-stroke;
+
+}
+
+.spark .sparkArea{
+
+    fill:var(--spark, var(--text-light));
+    opacity:.08;
+    stroke:none;
+
+}
+
+.spark .sparkCompare{
+
+    fill:none;
+    stroke:var(--text-faint);
+    stroke-width:1.2;
+    stroke-dasharray:3 3;
+    vector-effect:non-scaling-stroke;
+
+}
+
+.spark .sparkDot{
+
+    fill:var(--spark, var(--text-light));
+    stroke:var(--surface);
+    stroke-width:1.5;
+
+}
+
+.spark .sparkDot.isHighlight{
+
+    fill:var(--signal);
+
+}
+
+
+/* ==========================================================
+   Briefing — story feed
+========================================================== */
+
+.storyFeed{
+
+    margin-bottom:40px;
+
+}
+
+.feedHeader{
+
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:16px;
+    padding-bottom:12px;
+    border-bottom:2px solid var(--rule);
+
+}
+
+.feedHeader h3{
+
+    font-size:22px;
+    font-weight:900;
+
+}
+
+.feedHeader small{
+
+    color:var(--text-light);
+    font-size:12.5px;
+
+}
+
+.storyList{
+
+    list-style:none;
+    counter-reset:story;
+
+}
+
+.story{
+
+    --tone:var(--text-light);
+    --tone-bg:var(--surface-2);
+    counter-increment:story;
+    position:relative;
+    display:grid;
+    grid-template-columns:52px minmax(0,1fr) 190px;
+    gap:6px 22px;
+    padding:22px 14px 22px 0;
+    border-bottom:1px solid var(--border);
+    cursor:pointer;
+    transition:background .2s;
+    animation:storyIn .45s cubic-bezier(.2,.7,.2,1) both;
+
+}
+
+.story:nth-child(2){ animation-delay:.04s; }
+.story:nth-child(3){ animation-delay:.08s; }
+.story:nth-child(4){ animation-delay:.12s; }
+.story:nth-child(5){ animation-delay:.16s; }
+.story:nth-child(n+6){ animation-delay:.2s; }
+
+@keyframes storyIn{
+
+    from{ opacity:0; transform:translateY(8px); }
+    to{ opacity:1; transform:none; }
+
+}
+
+.story::before{
+
+    content:counter(story, decimal-leading-zero);
+    font-family:var(--font-display);
+    font-size:26px;
+    font-weight:900;
+    line-height:1;
+    color:var(--tone);
+    padding-top:2px;
+    text-align:right;
+
+}
+
+.story:hover{ background:var(--surface-2); }
+
+.story:focus-visible{ outline:2px solid var(--signal); outline-offset:-2px; }
+
+.story.tone-alert{ --tone:var(--tone-alert); --tone-bg:var(--tone-alert-bg); }
+.story.tone-bad{ --tone:var(--tone-bad); --tone-bg:var(--tone-bad-bg); }
+.story.tone-good{ --tone:var(--tone-good); --tone-bg:var(--tone-good-bg); }
+.story.tone-info{ --tone:var(--tone-info); --tone-bg:var(--tone-info-bg); }
+
+.storyMeta{
+
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-bottom:7px;
+
+}
+
+.storyTone{
+
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+    font-size:11px;
+    font-weight:700;
+    letter-spacing:.06em;
+    color:var(--tone);
+    background:var(--tone-bg);
+    padding:3px 9px 3px 7px;
+    border-radius:999px;
+
+}
+
+.storyTone svg{ width:13px; height:13px; }
+
+.storyKicker{
+
+    font-size:11.5px;
+    color:var(--text-faint);
+    letter-spacing:.04em;
+
+}
+
+.storyTitle{
+
+    font-size:19px;
+    line-height:1.45;
+    font-weight:700;
+    color:var(--ink);
+    text-wrap:pretty;
+
+}
+
+.storyBody{
+
+    margin-top:6px;
+    font-size:14px;
+    line-height:1.75;
+    color:var(--text-light);
+    max-width:46em;
+
+}
+
+.storySide{
+
+    display:flex;
+    flex-direction:column;
+    align-items:flex-end;
+    gap:6px;
+    --spark:var(--tone);
+
+}
+
+.storyStat{
+
+    font-family:var(--font-mono);
+    font-size:24px;
+    font-weight:500;
+    color:var(--tone);
+    font-feature-settings:"tnum";
+    line-height:1.1;
+    white-space:nowrap;
+
+}
+
+.storySide .spark{ width:160px; height:44px; }
+
+.storyOpen{
+
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+    font-size:12px;
+    font-weight:600;
+    color:var(--signal);
+    opacity:0;
+    transform:translateX(-4px);
+    transition:.2s;
+
+}
+
+.storyOpen svg{ width:14px; height:14px; }
+
+.story:hover .storyOpen,
+.story:focus-visible .storyOpen{ opacity:1; transform:none; }
+
+/* The lead story gets the front-page treatment. */
+
+.story.isLead{
+
+    grid-template-columns:52px minmax(0,1fr) 230px;
+    padding-top:28px;
+    padding-bottom:28px;
+
+}
+
+.story.isLead .storyTitle{
+
+    font-size:clamp(21px, 2.4vw, 27px);
+    font-weight:900;
+    line-height:1.4;
+
+}
+
+.story.isLead .storyBody{ font-size:15px; }
+
+.story.isLead .storyStat{ font-size:32px; }
+
+.story.isLead .storySide .spark{ width:220px; height:60px; }
+
+.storyEmpty{
+
+    padding:28px 0;
+    color:var(--text-light);
+
+}
+
+
+/* ==========================================================
+   Briefing — trend + all-insights
+========================================================== */
+
+.trendCard{
+
+    margin-bottom:22px;
+
+}
+
+.allInsights{
+
+    margin-bottom:30px;
+    border-top:1px solid var(--border);
+
+}
+
+.allInsights summary{
+
+    cursor:pointer;
+    list-style:none;
+    padding:16px 0;
+    font-size:13.5px;
+    font-weight:600;
+    color:var(--text-light);
+
+}
+
+.allInsights summary::-webkit-details-marker{ display:none; }
+
+.allInsights summary::before{
+
+    content:"＋";
+    display:inline-block;
+    width:1.4em;
+    color:var(--signal);
+
+}
+
+.allInsights[open] summary::before{ content:"－"; }
+
+.allInsights .insightCard{ margin-bottom:14px; }
+
+.insightNum.pos{ color:var(--tone-good); }
+.insightNum.neg{ color:var(--tone-alert); }
+
+
+/* ==========================================================
+   Responsive
+========================================================== */
+
+@media(max-width:1020px){
+
+    .vitals{ grid-template-columns:repeat(3, minmax(0,1fr)); }
+
+    .vital:nth-child(3n+1){ border-left:none; }
+
+    .vital:nth-child(n+4){ border-top:1px solid var(--border); }
+
+    .topbarActions .updateCard{ display:none; }
+
+}
+
+@media(max-width:900px){
+
+    /* undo the old sidebar's collapsed-rail rules */
+    .topbar .logo span{ display:inline; }
+    .topbar .sidebarMenu span{ display:inline; }
+
+}
+
+@media(max-width:720px){
+
+    :root{ --gutter:16px; }
+
+    .topbarInner{
+
+        height:auto;
+        flex-wrap:wrap;
+        gap:6px 12px;
+        padding-top:10px;
+        padding-bottom:8px;
+
+    }
+
+    .topbar .logo{ order:1; }
+
+    .topbarActions{ order:2; margin-left:auto; }
+
+    .topbarActions .primaryButton span{ display:none; }
+
+    .topbarActions .primaryButton{ padding:9px 11px; }
+
+    .topbar .sidebarMenu{
+
+        order:3;
+        flex:1 0 100%;
+        margin:0 -4px;
+
+    }
+
+    .topbar .sidebarMenu a{ padding:7px 11px; font-size:12.5px; }
+
+    .vitals{ grid-template-columns:repeat(2, minmax(0,1fr)); }
+
+    .vital:nth-child(n){ border-left:none; border-top:none; }
+
+    .vital:nth-child(2n){ border-left:1px solid var(--border); padding-left:14px; }
+
+    .vital:nth-child(n+3){ border-top:1px solid var(--border); }
+
+    .story,
+    .story.isLead{
+
+        grid-template-columns:34px minmax(0,1fr);
+        padding-right:0;
+
+    }
+
+    .story::before{ font-size:20px; }
+
+    .storySide{
+
+        grid-column:2;
+        flex-direction:row;
+        align-items:center;
+        justify-content:space-between;
+        flex-wrap:wrap;
+
+    }
+
+    .storySide .spark,
+    .story.isLead .storySide .spark{ width:120px; height:36px; }
+
+    .storyOpen{ opacity:1; transform:none; }
+
+    .feedHeader{ flex-direction:column; gap:2px; }
+
+}
+
+@media(max-width:640px){
+
+    /* the old stylesheet turned .sidebar into a bottom tab bar here —
+       the top bar handles navigation now, so neutralize the leftovers */
+    .topbar .sidebarMenu{ justify-content:flex-start; }
+    .topbar .sidebarMenu a{ flex:0 0 auto; flex-direction:row; text-align:left; }
+    .topbar .logo{ display:flex; }
+    .mainContent,
+    .app .mainContent{ padding:18px var(--gutter) 64px; margin-left:0; }
+
+}
+
+@media(prefers-reduced-motion:reduce){
+
+    .story{ animation:none; }
+    .storyOpen{ transition:none; }
+
+}
+
+
+/* ==========================================================
+   Dark — "night edition"
+========================================================== */
+
+[data-theme="dark"]{
+
+    --paper:#13120F;
+    --bg:var(--paper);
+    --surface:#1B1915;
+    --surface-2:#211F1A;
+    --ink:#F1ECE2;
+    --text:#ECE6DB;
+    --text-light:#A39B8D;
+    --text-faint:#6F685D;
+    --border:#2F2B24;
+    --rule:#ECE6DB;
+
+    --signal:#FF6A3D;
+    --signal-light:#3A1F14;
+
+    --tone-alert:#FF7A5C;
+    --tone-alert-bg:#3A1C14;
+    --tone-bad:#E0A548;
+    --tone-bad-bg:#352812;
+    --tone-good:#5CC98A;
+    --tone-good-bg:#16301F;
+    --tone-info:#86A3FF;
+    --tone-info-bg:#1C2440;
+
+    --m-users:#86A3FF;
+    --m-sessions:#4FC6C6;
+    --m-purchases:#5CC98A;
+    --m-revenue:#F07AA0;
+    --m-cvr:#A88BFF;
+    --m-aov:#E0A548;
+
+    --shadow-md:0 10px 30px rgba(0,0,0,.45);
+
+}
+
+[data-theme="dark"] .topbar .sidebarMenu a.active{
+
+    background:var(--ink);
+    color:var(--paper);
+
+}
+
+
+/* Sections that get scrolled to programmatically (story/vital
+   click-throughs) land below the sticky top bar, not under it. */
+.chartCard,
+.tableCard,
+.trendCard,
+.trafficChannelTrendWrap,
+.landingRisingPanel{
+
+    scroll-margin-top:84px;
+
+}
+
+@media(max-width:720px){
+
+    /* five tabs fit on a phone without icons */
+    .topbar .sidebarMenu a svg{ display:none; }
+
+}
+
+/* Tables: the v2 dark theme hard-coded cool blue-grays — warm them to match. */
+.modernTable thead{ background:var(--surface-2); }
+
+[data-theme="dark"] .modernTable thead{ background:var(--surface-2); }
+[data-theme="dark"] .modernTable tbody tr:nth-child(even){ background:color-mix(in srgb, var(--surface) 70%, var(--surface-2)); }
+[data-theme="dark"] .modernTable tbody tr:hover{ background:var(--signal-light); }
+
+@media(max-width:720px){
+
+    /* the top bar wraps to two rows here (~100px) */
+    .chartCard,
+    .tableCard,
+    .trendCard,
+    .trafficChannelTrendWrap,
+    .landingRisingPanel{ scroll-margin-top:112px; }
+
+}
+
+/* Narrow vital cards: the on-chart marker shrinks to just its dot. */
+@media(max-width:1180px){
+
+    .vitalOnChart{ font-size:0; gap:0; }
+
+}
+
+
+
+/* ==========================================================
+   Briefing — chart docked under the vital signs
+   The vitals ARE the chart's legend/toggles now (click a vital
+   to add/remove it), so the chart's own checkbox row is hidden
+   here and the card loses its frame to read as one block.
+========================================================== */
+
+.vitals{ margin-bottom:0; }
+
+.vitals + .trendCard{
+
+    background:transparent;
+    border:none;
+    border-bottom:1px solid var(--border);
+    border-radius:0;
+    padding:6px 0 18px;
+    margin-bottom:34px;
+
+}
+
+.vitals + .trendCard .chartHeader h3,
+.vitals + .trendCard #metricToggles{
+
+    display:none;
+
+}
+
+.vitals + .trendCard .chartHeader{ margin-bottom:0; }
+
+.vitals + .trendCard .trendOverlayRow{ justify-content:flex-end; margin-bottom:4px; }
+
+
+/* ==========================================================
+   Customer flow (Sales tab)
+   Monochrome ink + hollow rings, on purpose: every other chart
+   uses the metric colors, so this one shouldn't look like them.
+========================================================== */
+
+.customerCard{ padding-bottom:12px; }
+
+.custTop{
+
+    display:grid;
+    grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);
+    gap:18px 28px;
+    align-items:start;
+    padding:6px 0 18px;
+    border-bottom:1px solid var(--border);
+    margin-bottom:12px;
+
+}
+
+.custStats{
+
+    display:grid;
+    grid-template-columns:repeat(3, minmax(0,1fr));
+    gap:4px 18px;
+
+}
+
+.custStatMonth{
+
+    grid-column:1 / -1;
+    font-size:11.5px;
+    font-weight:700;
+    color:var(--text-light);
+    letter-spacing:.06em;
+
+}
+
+.custStat{ display:flex; flex-direction:column; gap:1px; min-width:0; }
+
+.custStatLabel{ font-size:11.5px; color:var(--text-light); }
+
+.custStatValue{
+
+    font-family:var(--font-display);
+    font-size:28px;
+    font-weight:900;
+    line-height:1.15;
+    color:var(--ink);
+
+}
+
+.custStatCompare{ font-size:11.5px; color:var(--text-light); font-family:var(--font-mono); }
+
+.custNotes{
+
+    list-style:none;
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    margin:0;
+    padding:0;
+
+}
+
+.custNote{
+
+    font-size:13px;
+    line-height:1.5;
+    padding-left:14px;
+    position:relative;
+    color:var(--text);
+
+}
+
+.custNote::before{
+
+    content:"";
+    position:absolute;
+    left:0;
+    top:.5em;
+    width:7px;
+    height:7px;
+    border-radius:50%;
+    border:1.5px solid var(--text-light);
+
+}
+
+.custNote.bad::before{ background:var(--tone-alert); border-color:var(--tone-alert); }
+.custNote.good::before{ background:var(--tone-good); border-color:var(--tone-good); }
+
+.custPanels{
+
+    display:grid;
+    grid-template-columns:repeat(2, minmax(0,1fr));
+    gap:8px 28px;
+
+}
+
+.custPanel{ margin:0; min-width:0; }
+
+.custPanel figcaption{
+
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:space-between;
+    align-items:center;
+    gap:4px 12px;
+    font-size:13px;
+    font-weight:700;
+    margin-bottom:4px;
+
+}
+
+.custLegend{
+
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    font-size:11.5px;
+    font-weight:500;
+    color:var(--text-light);
+
+}
+
+.custLegend .lgDot,
+.custLegend .lgRing{
+
+    width:9px;
+    height:9px;
+    border-radius:50%;
+    display:inline-block;
+
+}
+
+.custLegend .lgDot{ background:var(--ink); }
+.custLegend .lgRing{ border:1.5px solid var(--text-faint); margin-left:6px; }
+
+.cfSvg{ display:block; width:100%; height:auto; overflow:visible; }
+
+.cfSvg .cfGrid{ stroke:var(--border); stroke-width:1; }
+.cfSvg .cfTick,
+.cfSvg .cfMonth{ fill:var(--text-light); font-size:11px; font-family:var(--font-mono); }
+.cfSvg .cfYear{ fill:var(--text-faint); font-size:10px; font-family:var(--font-mono); }
+.cfSvg .cfHit{ fill:transparent; }
+.cfSvg .cfMonthGroup:hover .cfHit{ fill:var(--surface-2); }
+
+.cfSvg .cfLink{ stroke-width:2.5; stroke-linecap:round; }
+.cfSvg .cfLink.up{ stroke:var(--tone-good); }
+.cfSvg .cfLink.down{ stroke:var(--tone-alert); }
+
+.cfSvg .cfRing{ fill:var(--surface); stroke:var(--text-faint); stroke-width:1.6; }
+.cfSvg .cfDot{ fill:var(--ink); }
+.cfSvg .cfDot.isMarked{ stroke:var(--surface); stroke-width:2; }
+.cfSvg .cfDot.isOpen{ fill:var(--surface); stroke:var(--ink); stroke-width:1.6; stroke-dasharray:2 2; }
+
+.cfSvg .cfValue{ fill:var(--ink); font-size:11.5px; font-weight:700; font-family:var(--font-mono); }
+
+@media(max-width:900px){
+
+    .custTop,
+    .custPanels{ grid-template-columns:minmax(0,1fr); }
+
+}
+
+@media(max-width:520px){
+
+    .custStats{ grid-template-columns:repeat(2, minmax(0,1fr)); }
+    .custStatValue{ font-size:23px; }
+
+}
+
+.trendHint{ display:none; }
+
+.vitals + .trendCard .trendOverlayRow{
+
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:6px 16px;
+
+}
+
+.vitals + .trendCard .trendHint{
+
+    display:inline;
+    order:-1;
+    font-size:12px;
+    color:var(--text-faint);
+
+}
+
+/* Docked chart spacing: the header is empty here (title + toggles
+   hidden), and the base .trendOverlayRow's -16px top margin — meant to
+   tuck it under a title — pulled the controls up into the vital cards. */
+.vitals + .trendCard{ padding-top:22px; }
+
+.vitals + .trendCard .chartHeader{ display:none; }
+
+.vitals + .trendCard .trendOverlayRow{ margin:0 0 14px; }
+
+/* Dropdowns size to their longest option — on a phone the Traffic tab's
+   "By ad platform (Google, Meta, Yahoo, Criteo…)" select was 439px wide
+   and pushed the whole page sideways. */
+select{ max-width:100%; text-overflow:ellipsis; }
+
+
+/* ==========================================================
+   Traffic tree table
+========================================================== */
+
+.trafficCompareTable .tcSourceInner{
+
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding-left:calc(var(--depth, 0) * 22px);
+
+}
+
+.tcCaret,
+.tcCaretSpacer{
+
+    width:20px;
+    height:20px;
+    flex:0 0 20px;
+
+}
+
+.tcCaret{
+
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    border:none;
+    border-radius:6px;
+    background:transparent;
+    color:var(--text-light);
+    font-size:15px;
+    line-height:1;
+    cursor:pointer;
+    transition:transform .15s, background .15s;
+
+}
+
+.tcCaret:hover{ background:var(--surface-2); color:var(--text); }
+
+.tcCaret.isOpen{ transform:rotate(90deg); }
+
+.tcLabelWrap{ display:inline-flex; flex-direction:column; gap:1px; min-width:0; }
+.tcHint{
+    font-size:11px;
+    font-weight:400;
+    color:var(--text-faint);
+    line-height:1.3;
+    white-space:normal;
+}
+
+.tcCount{
+
+    font-size:10.5px;
+    color:var(--text-faint);
+    font-family:var(--font-mono);
+
+}
+
+.trafficCompareTable tr.lvl-platform td{ font-weight:600; }
+
+.trafficCompareTable tr.lvl-group td{ font-style:italic; color:var(--text-light); }
+
+.trafficCompareTable tr.lvl-channel td,
+.trafficCompareTable tr.lvl-source td{ font-size:12.5px; }
+/* a platform folded inside "small sources" isn't a top-level row */
+.trafficCompareTable tr.lvl-group ~ tr.lvl-platform td{ font-weight:500; }
+
+.trafficCompareTable tr.lvl-source .tcLabel{
+
+    font-family:var(--font-mono);
+    font-size:12px;
+    color:var(--text-light);
+
+}
+
+.trafficCompareTable tr.isInternal .tcLabel{ color:var(--text-light); }
+
+.tcMuted{ color:var(--text-faint); cursor:help; }
+
+/* rows are left-aligned labels in a centered table: keep the label column left */
+.trafficCompareTable td.tcSource{ text-align:left; }
+
+.tcMore{
+
+    border:none;
+    background:transparent;
+    color:var(--signal);
+    font:inherit;
+    font-size:12px;
+    font-weight:600;
+    cursor:pointer;
+    padding:2px 0;
+
+}
+
+.tcMore:hover{ text-decoration:underline; }
+
+
+/* Briefing shows the lead stories; the rest sit behind "show more". */
+.storyList.isCollapsed .story:nth-child(n+6){ display:none; }
+
+.storyMore{ list-style:none; padding:14px 0 4px; }
+
+.storyMoreBtn{
+
+    border:1px solid var(--border);
+    background:var(--surface);
+    color:var(--text);
+    border-radius:999px;
+    padding:8px 16px;
+    font:inherit;
+    font-size:13px;
+    font-weight:600;
+    cursor:pointer;
+
+}
+
+.storyMoreBtn:hover{ border-color:var(--text-light); }
+
+
+/* Customer flow: difference-vs-last-year chips + legend marks */
+.custHow{
+
+    margin:0 0 6px;
+    font-size:12px;
+    line-height:1.5;
+    color:var(--text-light);
+
+}
+
+.cfSvg .cfDiff text{
+
+    font-size:11px;
+    font-weight:700;
+    font-family:var(--font-mono);
+    /* halo in the card colour, drawn under the fill */
+    stroke:var(--surface);
+    stroke-width:3.5px;
+    stroke-linejoin:round;
+    paint-order:stroke;
+
+}
+
+.cfSvg .cfDiff.up text{ fill:var(--tone-good); }
+.cfSvg .cfDiff.down text{ fill:var(--tone-alert); }
+
+
+
+/* Refresh result message */
+.toast{
+
+    position:fixed;
+    left:50%;
+    bottom:24px;
+    transform:translate(-50%, 16px);
+    max-width:min(560px, calc(100vw - 32px));
+    padding:11px 18px;
+    border-radius:999px;
+    background:var(--ink);
+    color:var(--paper);
+    font-size:13px;
+    font-weight:500;
+    line-height:1.45;
+    box-shadow:var(--shadow-md);
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .2s, transform .2s;
+    z-index:300;
+
+}
+
+.toast.isShown{ opacity:1; transform:translate(-50%, 0); }
+.toast[data-tone="good"]{ background:var(--tone-good); color:#fff; }
+.toast[data-tone="bad"]{ background:var(--tone-alert); color:#fff; }
+
+@media print{ .toast{ display:none; } }
+
+
+/* ==========================================================
+   Customer flow — two framed panels, one diagram
+   New and repeat customers use the SAME dot diagram; what tells
+   them apart is the frame: its own box, accent colour, icon badge
+   and header (label + who these customers are + latest figure).
+========================================================== */
+
+.custKey{
+
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    gap:6px 18px;
+    margin:0 0 14px;
+
+}
+
+.custKey .custHow{ margin:0; }
+
+.custPanels{
+
+    grid-template-columns:minmax(0,1fr);
+    gap:18px;
+
+}
+
+/* One panel per row at every width: side by side they were too small. */
+
+.custPanel{
+
+    --cust:var(--m-users);
+    border:1px solid var(--border);
+    border-top:3px solid var(--cust);
+    border-radius:var(--radius);
+    background:var(--surface);
+    overflow:hidden;
+
+}
+
+.custPanel.isRepeat{ --cust:var(--m-cvr); }
+
+.custPanel figcaption.custPanelHead{
+
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    justify-content:flex-start;
+    gap:10px 12px;
+    margin:0;
+    padding:12px 16px;
+    font-weight:400;
+    background:color-mix(in srgb, var(--cust) 9%, var(--surface));
+    border-bottom:1px solid var(--border);
+
+}
+
+.custBadge{
+
+    flex:0 0 auto;
+    width:38px;
+    height:38px;
+    border-radius:50%;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    background:var(--cust);
+    color:#fff;
+
+}
+
+.custBadge svg{ width:20px; height:20px; }
+
+.custPanelTitles{
+
+    display:flex;
+    flex-direction:column;
+    min-width:0;
+    flex:1 1 180px;
+    line-height:1.35;
+
+}
+
+.custPanelTitles strong{
+
+    font-family:var(--font-display);
+    font-size:17px;
+    font-weight:900;
+    color:var(--cust);
+
+}
+
+.custPanelTitles small{ font-size:11.5px; color:var(--text-light); }
+
+.custPanelStat{
+
+    display:flex;
+    flex-direction:column;
+    align-items:flex-end;
+    margin-left:auto;
+    line-height:1.2;
+
+}
+
+.custPanelStatValue{
+
+    font-family:var(--font-mono);
+    font-size:24px;
+    font-weight:500;
+    color:var(--ink);
+
+}
+
+.custPanelStatMeta{ font-size:11px; color:var(--text-light); font-family:var(--font-mono); }
+.custPanelStatMeta b{ font-weight:600; }
+.custPanelStatMeta b.up{ color:var(--tone-good); }
+.custPanelStatMeta b.down{ color:var(--tone-alert); }
+
+.custPanel .custChart{ padding:10px 12px 6px; }
+
+/* Phones: keep the chart at a readable size and let it scroll sideways
+   inside its frame instead of shrinking the text. */
+.custPanel .custChart{ overflow-x:auto; }
+@media(max-width:720px){
+    .custPanel .cfSvg{ min-width:680px; }
+}
+
+/* this year's dots take the panel's accent colour */
+.custPanel .cfSvg .cfDot{ fill:var(--cust); }
+.custPanel .cfSvg .cfDot.isOpen{ fill:var(--surface); stroke:var(--cust); }
+.custLegend .lgDot{ background:var(--text); }
+
+/* the share figure now stands alone in the top row */
+.custStats{ grid-template-columns:minmax(0,1fr); }
+
+/* Full-width customer panels: marks and labels sized for the bigger plot */
+.custPanel .cfSvg .cfLink{ stroke-width:3.5; }
+.custPanel .cfSvg .cfRing{ stroke-width:2; }
+.custPanel .cfSvg .cfDiff text{ font-size:13.5px; stroke-width:4px; }
+.custPanel .cfSvg .cfTick,
+.custPanel .cfSvg .cfMonth{ font-size:12.5px; }
+.custPanel .cfSvg .cfYear{ font-size:11px; }
+
+
+/* ==========================================================
+   Ads Performance (Meta) — data-view="ads"
+   Reuses the vitals strip; tiles are read-only, not buttons.
+========================================================== */
+
+.adsToolbar{
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    gap:10px 18px;
+    margin-bottom:18px;
+}
+
+.adsProductPick{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    font-size:12.5px;
+    font-weight:600;
+    color:var(--text-light);
+}
+
+.adsProductPick select{
+    padding:7px 30px 7px 12px;
+    border:1px solid var(--border);
+    border-radius:10px;
+    background-color:var(--surface);
+    color:var(--text);
+    font:inherit;
+    font-weight:600;
+}
+
+.adsCompareLabel{ font-size:12px; color:var(--text-faint); }
+
+.adsVitals{ margin-bottom:10px; }
+
+.adsTile{ cursor:default; }
+.adsTile:hover{ background:transparent; }
+
+.adsTileSub{
+    margin-top:4px;
+    font-size:11.5px;
+    line-height:1.5;
+    color:var(--text-light);
+}
+
+.adsRef,
+.adsRefCell{ color:var(--text-faint); }
+
+.adsSourceNote{
+    margin:0 0 28px;
+    max-width:120ch;
+    font-size:12px;
+    line-height:1.6;
+    color:var(--text-faint);
+}
+
+.adsSplit{
+    display:grid;
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+    gap:16px;
+}
+
+.adsSplitCol{
+    display:grid;
+    gap:2px;
+    min-width:0;
+    padding:14px 16px 10px;
+    border:1px solid var(--border);
+    border-top:3px solid var(--m-purchases);
+    border-radius:12px;
+}
+
+.adsSplitCol.isRepeat{ border-top-color:var(--m-sessions); }
+
+.adsSplitHead{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-bottom:6px;
+}
+
+.adsSplitHead svg{ width:16px; height:16px; color:var(--text-light); }
+.adsSplitHead small{ margin-left:auto; font-size:12px; color:var(--text-light); }
+
+.adsSplitRow{
+    display:flex;
+    justify-content:space-between;
+    gap:12px;
+    padding:6px 0;
+    border-top:1px dashed var(--border);
+    font-size:13px;
+}
+
+.adsSplitRow b{
+    font-family:var(--font-mono);
+    font-weight:500;
+    font-feature-settings:"tnum";
+    text-align:right;
+}
+
+.adsSplitRow small{ color:var(--text-light); }
+
+.adsTable td,
+.adsTable th{ white-space:nowrap; }
+
+.adsTotalRow td{
+    font-weight:700;
+    border-top:2px solid var(--border);
+}
+
+.adsEmpty{
+    display:grid;
+    justify-items:center;
+    gap:8px;
+    padding:56px 16px;
+    border:1px dashed var(--border);
+    border-radius:14px;
+    text-align:center;
+    color:var(--text-light);
+}
+
+.adsEmpty svg{ width:28px; height:28px; }
+.adsEmpty strong{ color:var(--text); font-size:15px; }
+.adsEmpty p{ margin:0; max-width:60ch; font-size:13px; }
+
+@media (max-width:720px){
+    .adsSplit{ grid-template-columns:minmax(0, 1fr); }
+}
+
+/* The traffic-source filter has no meaning for the ads feed. */
+body[data-view="ads"] #sourceFilterSelect{ display:none; }
+
+/* CVR on too few sessions reads as a guide, not a result */
+.tcThin{ color:var(--text-faint); cursor:help; }
+.tcThin sup{ font-size:10px; margin-left:1px; }
+.tcFootnote{ margin:10px 4px 0; font-size:11.5px; color:var(--text-faint); }
+
+/* Phones: the previous-period column and the grey notes go; the delta stays */
+@media (max-width:640px){
+    .trafficCompareTable th:nth-child(3),
+    .trafficCompareTable td:nth-child(3){ display:none; }
+    .trafficCompareTable .tcHint{ display:none; }
+    .trafficCompareTable .tcSourceInner{ padding-left:calc(var(--depth, 0) * 12px); gap:6px; }
+}
+
+/* Sales is a fixed monthly view: the date range and compare mode don't apply. */
+.filterNote{ display:none; font-size:12px; color:var(--text-faint); align-self:center; }
+body[data-view="sales"] .filterNote{ display:inline; }
+body[data-view="sales"] #dateRangeSelect,
+body[data-view="sales"] #customRangeInputs,
+body[data-view="sales"] #compareModeSelect,
+body[data-view="sales"] .rangeCompareBar{ display:none !important; }

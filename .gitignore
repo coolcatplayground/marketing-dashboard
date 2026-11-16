@@ -10,3 +10,7 @@ desktop.ini
 
 # Logs
 *.log
+
+# Local tooling
+.claude/
+node_modules/

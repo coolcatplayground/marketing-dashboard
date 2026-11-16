@@ -172,7 +172,7 @@
 /* ==========================================================
    Skeleton State
    Applied to a KPI card from page load until its first real
-   value arrives (see THD.ui.showInitialSkeletons in ui.js) —
+   value arrives (see CoolCat.ui.showInitialSkeletons in ui.js) —
    masks the "--" placeholders with a shimmering bar instead.
 ========================================================== */
 

@@ -1,12 +1,6 @@
 /* ==============================================================
    CoolCat Dashboard — Team Notes (Firebase / Firestore)
    ==============================================================
-   Portfolio / demo build: FIREBASE_CONFIG below is left as the
-   REPLACE_ME placeholder on purpose, so this ships with no real
-   database credentials. isConfigured() returns false, and the
-   Notes tab falls back to its built-in "not configured" empty
-   state — nothing here talks to a real backend.
-
    Replaces the old localStorage-only note store so notes sync
    across every device/teammate instead of staying stuck to one
    browser. Requires the Firebase compat SDK scripts (loaded in
@@ -38,9 +32,9 @@
       the placeholders.
    ============================================================== */
 
-window.THD = window.THD || {};
+window.CoolCat = window.CoolCat || {};
 
-(function (THD) {
+(function (CoolCat) {
     "use strict";
 
     // ---- REPLACE THESE WITH YOUR REAL FIREBASE CONFIG VALUES ----
@@ -54,7 +48,7 @@ window.THD = window.THD || {};
     };
 
     const NOTES_COLLECTION = "notes";
-    const AUTHOR_NAME_KEY = "thd-note-author";
+    const AUTHOR_NAME_KEY = "coolcat-note-author";
 
     let db = null;
     let configured = false;
@@ -68,7 +62,7 @@ window.THD = window.THD || {};
             configured = true;
             return true;
         } catch (e) {
-            console.warn("[THD.notes] Firebase init failed:", e.message);
+            console.warn("[CoolCat.notes] Firebase init failed:", e.message);
             return false;
         }
     }
@@ -111,7 +105,7 @@ window.THD = window.THD || {};
                     onChange(notes);
                 },
                 (err) => {
-                    console.warn("[THD.notes] Firestore subscription failed:", err.message);
+                    console.warn("[CoolCat.notes] Firestore subscription failed:", err.message);
                     onChange([]);
                 }
             );
@@ -174,7 +168,7 @@ window.THD = window.THD || {};
         return FIREBASE_CONFIG.apiKey !== "REPLACE_ME";
     }
 
-    THD.notes = {
+    CoolCat.notes = {
         subscribe,
         add,
         archive,
@@ -185,4 +179,4 @@ window.THD = window.THD || {};
         isConfigured
     };
 
-})(window.THD);
+})(window.CoolCat);

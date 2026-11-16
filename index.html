@@ -7,13 +7,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>CoolCat Analytics Dashboard</title>
+    <meta name="description" content="A bilingual e-commerce marketing dashboard that writes out what changed and why. Portfolio demo on a fictional cat-supply shop.">
+    <meta property="og:title" content="CoolCat Analytics — did revenue move this week, and why?">
+    <meta property="og:description" content="A bilingual e-commerce marketing dashboard that writes out what changed and why. Portfolio demo on a fictional cat-supply shop.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://coolcatplayground.github.io/marketing-dashboard/">
+    <meta property="og:image" content="https://coolcatplayground.github.io/marketing-dashboard/docs/social-preview.png">
+    <meta name="twitter:card" content="summary_large_image">
 
     <!-- Applied before any CSS paints, so a saved dark-mode
          preference doesn't flash light-then-dark on load. -->
     <script>
         (function () {
             try {
-                if (localStorage.getItem("thd-theme") === "dark") {
+                if (localStorage.getItem("coolcat-theme") === "dark") {
                     document.documentElement.setAttribute("data-theme", "dark");
                 }
             } catch (e) {}
@@ -24,25 +31,27 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&family=Noto+Serif+JP:wght@600;700;900&family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
     <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 
     <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
     <!-- PapaParse (CSV parsing for live Google Sheets data) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 
     <!-- CSS -->
-    <link rel="stylesheet" href="css/main.css?v=24">
-    <link rel="stylesheet" href="css/layout.css?v=24">
-    <link rel="stylesheet" href="css/cards.css?v=24">
-    <link rel="stylesheet" href="css/charts.css?v=24">
-    <link rel="stylesheet" href="css/tables.css?v=24">
-    <link rel="stylesheet" href="css/dark.css?v=24">
-    <link rel="stylesheet" href="css/print.css?v=24" media="print">
+    <link rel="stylesheet" href="css/main.css?v=80p1">
+    <link rel="stylesheet" href="css/layout.css?v=80p1">
+    <link rel="stylesheet" href="css/cards.css?v=80p1">
+    <link rel="stylesheet" href="css/charts.css?v=80p1">
+    <link rel="stylesheet" href="css/tables.css?v=80p1">
+    <link rel="stylesheet" href="css/dark.css?v=80p1">
+    <link rel="stylesheet" href="css/briefing.css?v=80p1">
+    <link rel="stylesheet" href="css/coolcat.css?v=80p1">
+    <link rel="stylesheet" href="css/print.css?v=80p1" media="print">
 
 </head>
 
@@ -51,12 +60,14 @@
 <div class="app">
 
 <!-- ======================================================
-SIDEBAR
+TOP BAR
+Replaces the old fixed sidebar. Nav links keep the
+.sidebarMenu a[data-view] hooks ui.js already wires.
 ======================================================= -->
 
-<aside class="sidebar">
+<header class="topbar">
 
-    <div>
+    <div class="topbarInner">
 
         <div class="logo">
 
@@ -66,63 +77,61 @@ SIDEBAR
 
         </div>
 
-        <nav class="sidebarMenu">
+        <nav class="sidebarMenu" aria-label="Sections">
 
             <a href="#" class="active" data-view="overview">
-
-                <i data-lucide="layout-dashboard"></i>
-
-                <span data-i18n="nav.overview">Overview</span>
-
+                <i data-lucide="newspaper"></i>
+                <span data-i18n="nav.overview">Briefing</span>
             </a>
 
             <a href="#" data-view="traffic">
-
                 <i data-lucide="activity"></i>
-
                 <span data-i18n="nav.traffic">Traffic</span>
-
             </a>
 
             <a href="#" data-view="sales">
-
-                <i data-lucide="shopping-cart"></i>
-
+                <i data-lucide="shopping-bag"></i>
                 <span data-i18n="nav.sales">Sales</span>
+            </a>
 
+            <a href="#" data-view="ads">
+                <i data-lucide="megaphone"></i>
+                <span data-i18n="nav.ads">Ads</span>
             </a>
 
             <a href="#" data-view="notes">
-
                 <i data-lucide="sticky-note"></i>
-
                 <span data-i18n="nav.notes">Notes</span>
-
             </a>
 
             <a href="#" data-view="settings">
-
                 <i data-lucide="settings"></i>
-
                 <span data-i18n="nav.settings">Settings</span>
-
             </a>
 
         </nav>
 
-    </div>
+        <div class="topbarActions">
 
-    <div class="sidebarBottom">
+            <div class="updateCard">
+                <small data-i18n="header.dataAsOf">Data through</small>
+                <strong id="lastUpdate">--</strong>
+            </div>
 
-        <div class="version" data-i18n="sidebar.version">
+            <button class="iconButton" id="exportPdfBtn" data-i18n-title="header.exportPdf" title="Export PDF">
+                <i data-lucide="file-down"></i>
+            </button>
 
-            Version 0.1
+            <button class="primaryButton" id="refreshBtn" data-i18n-title="header.refreshTitle" title="Check for new data">
+                <i data-lucide="refresh-cw"></i>
+                <span data-i18n="header.refresh">Refresh</span>
+            </button>
 
         </div>
 
     </div>
 
-</aside>
+</header>
 
 
 
@@ -149,42 +158,6 @@ MAIN
             Marketing performance at a glance
 
         </p>
-
-    </div>
-
-    <div class="headerRight">
-
-        <div class="updateCard">
-
-            <small data-i18n="header.lastUpdate">
-
-                Last Update
-
-            </small>
-
-            <strong id="lastUpdate">
-
-                --
-
-            </strong>
-
-        </div>
-
-        <button class="secondaryButton" id="exportPdfBtn">
-
-            <i data-lucide="file-down"></i>
-
-            <span data-i18n="header.exportPdf">Export PDF</span>
-
-        </button>
-
-        <button class="primaryButton">
-
-            <i data-lucide="refresh-cw"></i>
-
-            <span data-i18n="header.refresh">Refresh</span>
-
-        </button>
 
     </div>
 
@@ -240,6 +213,8 @@ MAIN
 
     </select>
 
+    <span class="filterNote" id="salesFixedNote" data-i18n="sales.fixedNote">Monthly view (closes on the 20th) — not affected by the date range</span>
+
     <select id="compareModeSelect">
 
         <option value="previous" data-i18n="filter.comparePrevious">Compare Previous</option>
@@ -264,324 +239,82 @@ MAIN
 
 <div class="dashboardView" data-view="overview">
 
-<!-- ================= KPI ================= -->
+<!-- ================= BRIEFING HERO ================= -->
 
-<section class="kpiGrid">
+<section class="brief" id="brief">
 
-    <article class="card kpiCard users" data-kpi="users">
+    <p class="briefKicker">
+        <span id="briefRange">--</span>
+        <span class="briefCompare" id="briefCompare"></span>
+        <span class="briefAsOf" id="briefAsOf"></span>
+    </p>
 
-        <div class="cardTop">
+    <h2 class="briefHeadline" id="briefHeadline"><span class="skeletonBlock" style="width:70%"></span></h2>
 
-            <span data-i18n="kpi.totalUsers">Total Users</span>
+    <p class="briefDek" id="briefDek"></p>
 
-            <i data-lucide="users"></i>
-
-        </div>
-
-        <h3 data-field="value">--</h3>
-
-        <div class="cardBottom">
-
-            <div>
-
-                <strong data-field="delta">--</strong>
-
-                <small data-i18n="kpi.vsPrevious">vs Previous Period</small>
-
-            </div>
-
-            <div>
-
-                <small data-i18n="kpi.avgDay">Avg / Day</small>
-
-                <strong data-field="daily">--</strong>
-
-            </div>
-
-        </div>
-
-        <div class="kpiGoalProgress" data-goal="users" style="display:none;">
-
-            <div class="kpiGoalBar">
-
-                <div class="kpiGoalBarFill" data-field="goalFill"></div>
-
-            </div>
-
-            <small data-field="goalLabel"></small>
-
-        </div>
-
-    </article>
-
-
-
-    <article class="card kpiCard sessions" data-kpi="sessions">
-
-        <div class="cardTop">
-
-            <span data-i18n="kpi.sessions">Sessions</span>
-
-            <i data-lucide="activity"></i>
-
-        </div>
-
-        <h3 data-field="value">--</h3>
-
-        <div class="cardBottom">
-
-            <div>
-
-                <strong data-field="delta">--</strong>
-
-                <small data-i18n="kpi.vsPrevious">vs Previous Period</small>
-
-            </div>
-
-            <div>
-
-                <small data-i18n="kpi.avgDay">Avg / Day</small>
-
-                <strong data-field="daily">--</strong>
-
-            </div>
-
-        </div>
-
-        <div class="kpiGoalProgress" data-goal="sessions" style="display:none;">
-
-            <div class="kpiGoalBar">
-
-                <div class="kpiGoalBarFill" data-field="goalFill"></div>
-
-            </div>
-
-            <small data-field="goalLabel"></small>
-
-        </div>
-
-    </article>
-
-
-
-    <article class="card kpiCard purchases" data-kpi="purchases">
-
-        <div class="cardTop">
-
-            <span data-i18n="kpi.purchases">Ecommerce Purchases</span>
-
-            <i data-lucide="shopping-cart"></i>
-
-        </div>
-
-        <h3 data-field="value">--</h3>
-
-        <div class="cardBottom">
-
-            <div>
-
-                <strong data-field="delta">--</strong>
-
-                <small data-i18n="kpi.vsPrevious">vs Previous Period</small>
-
-            </div>
-
-            <div>
-
-                <small data-i18n="kpi.dailyAvg">Daily Avg</small>
-
-                <strong data-field="daily">--</strong>
-
-            </div>
-
-        </div>
-
-        <div class="kpiGoalProgress" data-goal="purchases" style="display:none;">
-
-            <div class="kpiGoalBar">
-
-                <div class="kpiGoalBarFill" data-field="goalFill"></div>
-
-            </div>
-
-            <small data-field="goalLabel"></small>
-
-        </div>
-
-    </article>
-
-
-
-    <article class="card kpiCard revenue" data-kpi="revenue">
-
-        <div class="cardTop">
-
-            <span data-i18n="kpi.revenue">Total Revenue</span>
-
-            <i data-lucide="wallet"></i>
-
-        </div>
-
-        <h3 data-field="value">--</h3>
-
-        <div class="cardBottom">
-
-            <div>
-
-                <strong data-field="delta">--</strong>
-
-                <small data-i18n="kpi.vsPrevious">vs Previous Period</small>
-
-            </div>
-
-            <div>
-
-                <small data-i18n="kpi.dailyAvg">Daily Avg</small>
-
-                <strong data-field="daily">--</strong>
-
-            </div>
-
-        </div>
-
-        <div class="kpiGoalProgress" data-goal="revenue" style="display:none;">
-
-            <div class="kpiGoalBar">
-
-                <div class="kpiGoalBarFill" data-field="goalFill"></div>
-
-            </div>
-
-            <small data-field="goalLabel"></small>
-
-        </div>
-
-    </article>
-
-
-
-    <article class="card kpiCard cvr" data-kpi="cvr">
-
-        <div class="cardTop">
-
-            <span data-i18n="kpi.cvr">CVR</span>
-
-            <i data-lucide="target"></i>
-
-        </div>
-
-        <h3 data-field="value">--</h3>
-
-        <div class="cardBottom">
-
-            <div>
-
-                <strong data-field="delta">--</strong>
-
-                <small data-i18n="kpi.vsPrevious">vs Previous Period</small>
-
-            </div>
-
-            <div>
-
-                <small data-i18n="kpi.goal">Goal</small>
-
-                <strong data-field="daily">--</strong>
-
-            </div>
-
-        </div>
-
-        <div class="kpiGoalProgress" data-goal="cvr" style="display:none;">
-
-            <div class="kpiGoalBar">
-
-                <div class="kpiGoalBarFill" data-field="goalFill"></div>
-
-            </div>
-
-            <small data-field="goalLabel"></small>
-
-        </div>
-
-    </article>
+    <p class="briefPartial" id="briefPartial" style="display:none;" data-i18n="brief.kickerPartial">Today is still being counted.</p>
 
 </section>
 
+<!-- ================= VITAL SIGNS ================= -->
+<!-- Each vital is a button: clicking it plots that metric in the
+     trend chart below (same toggles as #metricToggles). -->
 
+<section class="vitals" id="vitals" aria-label="Vital signs"></section>
 
 <!-- ================= MAIN CHART ================= -->
 
-<section class="chartCard">
+<section class="chartCard trendCard" id="trendCard">
 
     <div class="chartHeader">
 
         <div>
 
-            <h3 data-i18n="trend.title">
+            <h3 data-i18n="brief.trendTitle">
 
-                Metrics Trend
+                The numbers behind it
 
             </h3>
-
-            <small data-i18n="trend.subtitle">
-
-                Select a Date Range Above
-
-            </small>
 
         </div>
 
         <div class="metricToggles" id="metricToggles">
 
             <label class="metricToggle" data-metric="users">
-
-                <input type="checkbox" checked>
-
-                <span class="metricDot" style="background:#2B59FF"></span>
-
+                <input type="checkbox">
+                <span class="metricDot" style="background:var(--m-users)"></span>
                 <span data-i18n="kpi.totalUsers">Total Users</span>
-
             </label>
 
             <label class="metricToggle" data-metric="sessions">
-
-                <input type="checkbox">
-
-                <span class="metricDot" style="background:#0EA5A5"></span>
-
+                <input type="checkbox" checked>
+                <span class="metricDot" style="background:var(--m-sessions)"></span>
                 <span data-i18n="kpi.sessions">Sessions</span>
-
             </label>
 
             <label class="metricToggle" data-metric="purchases">
-
-                <input type="checkbox" checked>
-
-                <span class="metricDot" style="background:#0F9D63"></span>
-
+                <input type="checkbox">
+                <span class="metricDot" style="background:var(--m-purchases)"></span>
                 <span data-i18n="kpi.purchases">Ecommerce Purchases</span>
-
             </label>
 
             <label class="metricToggle" data-metric="revenue">
-
-                <input type="checkbox">
-
-                <span class="metricDot" style="background:#D6336C"></span>
-
+                <input type="checkbox" checked>
+                <span class="metricDot" style="background:var(--m-revenue)"></span>
                 <span data-i18n="kpi.revenue">Total Revenue</span>
-
             </label>
 
             <label class="metricToggle" data-metric="cvr">
-
                 <input type="checkbox">
-
-                <span class="metricDot" style="background:#7C4DFF"></span>
-
+                <span class="metricDot" style="background:var(--m-cvr)"></span>
                 <span data-i18n="kpi.cvr">CVR</span>
+            </label>
 
+            <label class="metricToggle" data-metric="aov">
+                <input type="checkbox">
+                <span class="metricDot" style="background:var(--m-aov)"></span>
+                <span data-i18n="brief.vital.aov">Order value</span>
             </label>
 
         </div>
@@ -598,6 +331,8 @@ MAIN
 
         </label>
 
+        <small class="trendHint" data-i18n="brief.vital.hint">Click a card above to show/hide it here</small>
+
     </div>
 
     <div class="chartBody">
@@ -607,6 +342,55 @@ MAIN
     </div>
 
 </section>
+
+<!-- ================= STORY FEED ================= -->
+
+<section class="storyFeed">
+
+    <div class="feedHeader">
+        <h3 data-i18n="brief.feedTitle">What changed</h3>
+        <small data-i18n="brief.feedSub">Ranked by how much it needs your attention</small>
+    </div>
+
+    <ol class="storyList" id="storyList"></ol>
+
+</section>
+
+
+
+<!-- ================= ALL INSIGHTS (collapsed) ================= -->
+<!-- The original sentence lists, kept for anyone who wants the
+     full text version — the story feed above is built from the
+     same detectors. -->
+
+<details class="allInsights">
+
+    <summary data-i18n="brief.allInsights">Every insight, as a list</summary>
+
+    <section class="insightCard">
+
+        <div class="sectionTitle">
+            <h3 data-i18n="insights.title">Key Insights</h3>
+        </div>
+
+        <ul id="keyInsightsList">
+            <li>Loading insights…</li>
+        </ul>
+
+    </section>
+
+    <section class="insightCard" id="topLandingPageInsightsCard">
+
+        <div class="sectionTitle">
+            <h3 data-i18n="insights.topLandingTitle">Top Landing Pages Insights</h3>
+        </div>
+
+        <ul id="topLandingPageInsightsList">
+        </ul>
+
+    </section>
+
+</details>
 
 </div>
 
@@ -638,13 +422,7 @@ MAIN
 
         <div class="chartTools">
 
-            <select id="trafficGroupSelect">
 
-                <option value="platform" selected data-i18n="traffic.byPlatform">By Ad Platform (Google, Meta, Yahoo, Criteo…)</option>
-
-                <option value="channel" data-i18n="traffic.byChannel">By Channel (GA4 default grouping)</option>
-
-            </select>
 
         </div>
 
@@ -774,6 +552,8 @@ MAIN
 
     </div>
 
+    <p class="tcFootnote" data-i18n="traffic.thinNote">* Fewer than 100 sessions: CVR is a rough guide only.</p>
+
 </section>
 
 
@@ -854,49 +634,7 @@ MAIN
 
 
 
-<!-- ================= INSIGHTS ================= -->
 
-<div class="dashboardView" data-view="overview">
-
-<section class="insightCard">
-
-    <div class="sectionTitle">
-
-        <h3 data-i18n="insights.title">
-
-            Key Insights
-
-        </h3>
-
-    </div>
-
-    <ul id="keyInsightsList">
-
-        <li>Loading insights…</li>
-
-    </ul>
-
-</section>
-
-<section class="insightCard" id="topLandingPageInsightsCard">
-
-    <div class="sectionTitle">
-
-        <h3 data-i18n="insights.topLandingTitle">
-
-            Top Landing Pages Insights
-
-        </h3>
-
-    </div>
-
-    <ul id="topLandingPageInsightsList">
-
-    </ul>
-
-</section>
-
-</div>
 
 
 
@@ -1152,6 +890,91 @@ MAIN
 
 
 
+<!-- ================= CUSTOMER FLOW ================= -->
+<!-- Replaces the old 100%-stacked new/repeat share bars. Drawn as
+     inline SVG by CoolCat.ui.renderCustomerFlow (ui.js) — dots/rings
+     on purpose, so it can't be mistaken for the metric charts. -->
+
+<section class="chartCard customerCard" id="customerCard">
+
+    <div class="chartHeader">
+
+        <div>
+
+            <h3 data-i18n="customers.title">Customer flow</h3>
+
+            <small data-i18n="customers.subtitle">New-customer and repeat orders by business month (closes on the 20th)</small>
+
+        </div>
+
+    </div>
+
+    <div class="custTop">
+
+        <div class="custStats" id="custStats"></div>
+
+        <ul class="custNotes" id="custNotes"></ul>
+
+    </div>
+
+    <!-- One shared key: both panels below use the same diagram. -->
+    <div class="custKey">
+
+        <span class="custLegend">
+            <span class="lgDot"></span><span data-i18n="customers.thisYear">This year</span>
+            <span class="lgRing"></span><span data-i18n="customers.lastYearSame">Same month last year</span>
+        </span>
+
+        <span class="custHow" data-i18n="customers.howToRead">Each number is the change vs the same month last year — green above = more, red below = fewer.</span>
+
+    </div>
+
+    <div class="custPanels">
+
+        <figure class="custPanel isNew">
+
+            <figcaption class="custPanelHead">
+
+                <span class="custBadge"><i data-lucide="user-plus"></i></span>
+
+                <span class="custPanelTitles">
+                    <strong data-i18n="customers.newLabel">New customers</strong>
+                    <small data-i18n="customers.newDesc">First-time buyers · orders per month</small>
+                </span>
+
+                <span class="custPanelStat" id="custNewStat"></span>
+
+            </figcaption>
+
+            <div class="custChart" id="custNewChart"></div>
+
+        </figure>
+
+        <figure class="custPanel isRepeat">
+
+            <figcaption class="custPanelHead">
+
+                <span class="custBadge"><i data-lucide="repeat"></i></span>
+
+                <span class="custPanelTitles">
+                    <strong data-i18n="customers.repeatLabel">Repeat customers</strong>
+                    <small data-i18n="customers.repeatDesc">Returning buyers (2nd order or later) · orders per month</small>
+                </span>
+
+                <span class="custPanelStat" id="custRepeatStat"></span>
+
+            </figcaption>
+
+            <div class="custChart" id="custRepeatChart"></div>
+
+        </figure>
+
+    </div>
+
+</section>
+
+
+
 <!-- ================= NEW / REPEAT TABLE (SPREADSHEET) ================= -->
 
 <section class="tableCard">
@@ -1228,37 +1051,7 @@ MAIN
 
 
 
-<!-- ================= NEW / REPEAT CHART ================= -->
 
-<section class="chartCard">
-
-    <div class="chartHeader">
-
-        <div>
-
-            <h3 data-i18n="newRepeat.chartTitle">
-
-                New vs Repeat Customers
-
-            </h3>
-
-            <small data-i18n="newRepeat.chartSubtitle">
-
-                Share of orders and revenue from new vs. repeat customers, by business month
-
-            </small>
-
-        </div>
-
-    </div>
-
-    <div class="chartBody">
-
-        <canvas id="newRepeatChart"></canvas>
-
-    </div>
-
-</section>
 
 
 
@@ -1283,6 +1076,101 @@ MAIN
     </ul>
 
 </section>
+
+</div>
+
+
+
+<!-- ================= ADS PERFORMANCE (META) ================= -->
+<!-- Cost from Meta Ads Manager, orders/revenue from the order system, joined in
+     the ads sheet (feed_ads tab). Rendered by
+     CoolCat.ui.renderAds / CoolCat.charts.renderAdsChart. -->
+
+<div class="dashboardView viewHidden" data-view="ads">
+
+<div class="adsToolbar">
+
+    <label class="adsProductPick">
+        <span data-i18n="ads.productLabel">Product</span>
+        <select id="adsProductSelect">
+            <option value="all" data-i18n="ads.allProducts">All products</option>
+        </select>
+    </label>
+
+    <small class="adsCompareLabel" id="adsCompareLabel"></small>
+
+</div>
+
+<div class="adsEmpty" id="adsEmpty" style="display:none;"></div>
+
+<div id="adsContent">
+
+    <section class="vitals adsVitals" id="adsVitals" aria-label="Ads KPIs"></section>
+
+    <p class="adsSourceNote" id="adsSourceNote"></p>
+
+    <section class="chartCard">
+
+        <div class="chartHeader">
+            <div>
+                <h3 data-i18n="ads.chartTitle">Spend and orders</h3>
+                <small data-i18n="ads.chartSub">Bars: order-system orders (new / repeat). Line: Meta ad spend.</small>
+            </div>
+        </div>
+
+        <div class="chartBody">
+            <canvas id="adsChart"></canvas>
+        </div>
+
+    </section>
+
+    <section class="chartCard">
+
+        <div class="chartHeader">
+            <div>
+                <h3 data-i18n="ads.splitTitle">New vs repeat</h3>
+                <small data-i18n="ads.splitSub">Orders and revenue from the order system</small>
+            </div>
+        </div>
+
+        <div class="adsSplit" id="adsSplit"></div>
+
+    </section>
+
+    <section class="tableCard">
+
+        <div class="tableHeader">
+            <h3 data-i18n="ads.campaignTitle">By campaign</h3>
+        </div>
+
+        <div class="tableResponsive">
+            <table class="modernTable adsTable">
+                <thead>
+                    <tr>
+                        <th data-i18n="th.ads.campaign">Campaign</th>
+                        <th data-i18n="th.ads.product">Product</th>
+                        <th class="number" data-i18n="th.ads.spend">Spend</th>
+                        <th class="number" data-i18n="th.ads.imp">Impr.</th>
+                        <th class="number" data-i18n="th.ads.clicks">Clicks</th>
+                        <th class="number" data-i18n="th.ads.ctr">CTR</th>
+                        <th class="number" data-i18n="th.ads.cpc">CPC</th>
+                        <th class="number" data-i18n="th.ads.metaCv">Meta CV (ref.)</th>
+                        <th class="number" data-i18n="th.ads.orders">Orders</th>
+                        <th class="number" data-i18n="th.ads.new">New</th>
+                        <th class="number" data-i18n="th.ads.repeat">Repeat</th>
+                        <th class="number" data-i18n="th.ads.revenue">Revenue</th>
+                        <th class="number" data-i18n="th.ads.roas">ROAS</th>
+                        <th class="number" data-i18n="th.ads.cpa">CPA</th>
+                        <th class="number" data-i18n="th.ads.newCpa">New CPA</th>
+                    </tr>
+                </thead>
+                <tbody id="adsCampaignTable"></tbody>
+            </table>
+        </div>
+
+    </section>
+
+</div>
 
 </div>
 
@@ -1434,18 +1322,20 @@ MAIN
 
 </script>
 
-<script src="js/i18n.js?v=24"></script>
-<script src="js/charts.js?v=24"></script>
-<script src="js/ui.js?v=24"></script>
-<script src="js/data.js?v=24"></script>
-<script src="js/export.js?v=24"></script>
+<script src="js/i18n.js?v=80p1"></script>
+<script src="js/charts.js?v=80p1"></script>
+<script src="js/ui.js?v=80p1"></script>
+<script src="js/data.js?v=80p1"></script>
+<script src="js/export.js?v=80p1"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-<script src="js/notes.js?v=24"></script>
+<script src="js/notes.js?v=80p1"></script>
 <!-- js/goals.js (Monthly Targets) — built for v2 but paused before ship,
-     see thd-dashboard-changelog.md. Re-add this tag plus the wiring
+     see the changelog. Re-add this tag plus the wiring
      commented out in app.js's init() to bring it back. -->
-<script src="js/app.js?v=24"></script>
+<script src="js/demo-data.js?v=80p1"></script>
+<script src="js/coolcat.js?v=80p1"></script>
+<script src="js/app.js?v=80p1"></script>
 
 </body>
 </html>

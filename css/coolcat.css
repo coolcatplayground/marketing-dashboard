@@ -1,0 +1,270 @@
+/* ==========================================================
+   CoolCat Analytics
+   Portfolio layer — cats and motion (see js/coolcat.js)
+   Quiet on purpose: the illustrations sit on rules and edges the
+   page already has, and nothing moves for long.
+========================================================== */
+
+.ccArt{
+
+    display:block;
+    pointer-events:none;
+    user-select:none;
+    -webkit-user-drag:none;
+
+}
+
+/* the art is ink on paper; on the dark theme it reads better a touch softer */
+[data-theme="dark"] .ccArt{ filter:brightness(.9) saturate(.9); }
+
+
+/* ---------- seal mark ---------- */
+
+.ccMark{
+
+    width:22px;
+    height:22px;
+    flex:none;
+    align-self:center;
+    margin-right:2px;
+
+}
+
+.ccMark rect{ fill:var(--signal); }
+.ccMark path{ fill:#FFF8EE; }
+
+
+/* ---------- the reader on the briefing rule ---------- */
+
+.brief{
+
+    position:relative;
+    padding-right:188px;
+
+}
+
+.ccReader{
+
+    position:absolute;
+    right:6px;
+    bottom:-3px;
+    width:150px;
+    animation:ccSettle 1s .3s cubic-bezier(.2,.7,.2,1) both;
+
+}
+
+@keyframes ccSettle{
+
+    from{ opacity:0; transform:translateY(8px); }
+    to{ opacity:1; transform:none; }
+
+}
+
+@media(max-width:900px){
+
+    .brief{ padding-right:124px; }
+    .ccReader{ width:106px; }
+
+}
+
+@media(max-width:640px){
+
+    .brief{ padding-right:0; }
+    .ccReader{ display:none; }
+
+}
+
+
+/* ---------- the portfolio note, with a cat peeking over it ---------- */
+
+.dataSourceWarning.ccDemo{
+
+    position:relative;
+    margin-top:62px;
+    background:var(--surface);
+    border:1px solid var(--border);
+    color:var(--text-light);
+    padding-right:22px;
+
+}
+
+.dataSourceWarning.ccDemo > svg,
+.dataSourceWarning.ccDemo > i{ display:none; }
+
+.dataSourceWarning.ccDemo::before{
+
+    content:"";
+    flex:none;
+    width:6px;
+    height:6px;
+    border-radius:50%;
+    background:var(--signal);
+
+}
+
+.ccPeek{
+
+    position:absolute;
+    right:30px;
+    bottom:calc(100% + 1px);
+    width:108px;
+    height:66px;
+    overflow:hidden;
+    pointer-events:none;
+
+}
+
+.ccPeeker{
+
+    position:absolute;
+    left:0;
+    bottom:0;
+    width:100%;
+    animation:ccPeekUp 1.1s 1s cubic-bezier(.2,.75,.25,1) both;
+
+}
+
+@keyframes ccPeekUp{
+
+    0%{ transform:translateY(100%); }
+    70%{ transform:translateY(-2%); }
+    100%{ transform:none; }
+
+}
+
+@media(max-width:640px){
+
+    .dataSourceWarning.ccDemo{ margin-top:52px; }
+    .ccPeek{ right:16px; width:88px; height:54px; }
+
+}
+
+
+/* ---------- a cat asleep where a feature is switched off ---------- */
+
+.ccHasNap > i[data-lucide],
+.ccHasNap > svg.lucide{ display:none; }
+
+.ccNap{
+
+    width:168px;
+    margin:6px auto 12px;
+    transform-origin:50% 92%;
+    animation:ccBreathe 4.6s ease-in-out infinite;
+
+}
+
+@keyframes ccBreathe{
+
+    0%, 100%{ transform:none; }
+    45%{ transform:scale(1.006, 1.02); }
+
+}
+
+.notesEmpty.ccHasNap{
+
+    text-align:center;
+    padding:22px 16px 26px;
+    color:var(--text-light);
+    line-height:1.7;
+
+}
+
+
+/* ---------- a cat strolling along the header ---------- */
+
+.topbar .topbarInner{
+
+    position:relative;
+    z-index:1;
+
+}
+
+.ccWalk{
+
+    position:absolute;
+    left:0;
+    right:0;
+    bottom:0;
+    height:46px;
+    overflow:hidden;
+    pointer-events:none;
+    z-index:0;
+    visibility:hidden;
+
+}
+
+.ccWalk.isWalking{ visibility:visible; }
+
+.ccStride{
+
+    position:absolute;
+    left:0;
+    bottom:0;
+    width:56px;
+    transform:translateX(-80px);
+
+}
+
+.ccWalk.isWalking .ccStride{ animation:ccStroll 11s linear forwards; }
+.ccWalk.isWalking .ccWalker{ animation:ccStep .44s ease-in-out infinite alternate; }
+
+.ccWalker{ width:56px; }
+
+@keyframes ccStroll{
+
+    0%{ transform:translateX(-80px); opacity:0; }
+    4%{ opacity:1; }
+    96%{ opacity:1; }
+    100%{ transform:translateX(calc(100vw + 20px)); opacity:0; }
+
+}
+
+@keyframes ccStep{
+
+    from{ transform:translateY(0) rotate(0deg); }
+    to{ transform:translateY(-1.5px) rotate(-.6deg); }
+
+}
+
+
+/* ---------- cards settle in when a tab opens ---------- */
+
+.dashboardView:not(.viewHidden) > *{ animation:ccRise .5s cubic-bezier(.16,1,.3,1) both; }
+.dashboardView:not(.viewHidden) > :nth-child(2){ animation-delay:.04s; }
+.dashboardView:not(.viewHidden) > :nth-child(3){ animation-delay:.08s; }
+.dashboardView:not(.viewHidden) > :nth-child(4){ animation-delay:.12s; }
+.dashboardView:not(.viewHidden) > :nth-child(n+5){ animation-delay:.16s; }
+
+@keyframes ccRise{
+
+    from{ opacity:0; transform:translateY(6px); }
+    to{ opacity:1; transform:none; }
+
+}
+
+
+/* the internal build links its source spreadsheet here; the demo has none to link */
+span.sourceLink{ color:inherit; text-decoration:none; }
+
+
+/* ---------- motion off, print off ---------- */
+
+@media(prefers-reduced-motion:reduce){
+
+    .ccReader,
+    .ccPeeker,
+    .ccNap,
+    .dashboardView:not(.viewHidden) > *{ animation:none; }
+    .ccWalk{ display:none; }
+
+}
+
+@media print{
+
+    .ccArt,
+    .ccWalk,
+    .ccPeek{ display:none !important; }
+    .brief{ padding-right:0; }
+
+}
